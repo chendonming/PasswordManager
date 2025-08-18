@@ -91,6 +91,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     // 清理服务资源
     if (mainProcessManager) {
+      console.log('Hook: window-all-closed -> calling cleanup')
       mainProcessManager.cleanup()
       mainProcessManager = null
     }
@@ -99,10 +100,109 @@ app.on('window-all-closed', () => {
 })
 
 // 应用退出前清理
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+  console.log('Hook: before-quit')
   if (mainProcessManager) {
-    mainProcessManager.cleanup()
+    try {
+      console.log('Hook: before-quit -> calling shutdown')
+      await mainProcessManager.shutdown()
+    } catch (err) {
+      console.error('before-quit shutdown 失败:', err)
+      // fallback to sync cleanup
+      try {
+        mainProcessManager.cleanup()
+      } catch (e) {
+        console.error('before-quit cleanup 失败:', e)
+      }
+    }
     mainProcessManager = null
+  }
+})
+
+// 在应用即将完全退出时，确保先锁定并清理敏感内存
+app.on('will-quit', async () => {
+  console.log('Hook: will-quit')
+  if (mainProcessManager) {
+    try {
+      console.log('Hook: will-quit -> calling shutdown')
+      await mainProcessManager.shutdown()
+      mainProcessManager = null
+    } catch (err) {
+      console.error('will-quit shutdown 失败:', err)
+    }
+  }
+})
+
+// 捕获进程信号（例如在开发环境按 Ctrl+C）
+process.on('SIGINT', async () => {
+  console.log('Hook: SIGINT received — attempting graceful shutdown')
+  if (mainProcessManager) {
+    try {
+      console.log('Hook: SIGINT -> calling shutdown')
+      await mainProcessManager.shutdown()
+    } catch (err) {
+      console.error('SIGINT shutdown 失败:', err)
+      try {
+        mainProcessManager.cleanup()
+      } catch (e) {
+        console.error('SIGINT cleanup 也失败:', e)
+      }
+    }
+  }
+  process.exit(0)
+})
+
+process.on('SIGTERM', async () => {
+  console.log('Hook: SIGTERM received — attempting graceful shutdown')
+  if (mainProcessManager) {
+    try {
+      console.log('Hook: SIGTERM -> calling shutdown')
+      await mainProcessManager.shutdown()
+    } catch (err) {
+      console.error('SIGTERM shutdown 失败:', err)
+      try {
+        mainProcessManager.cleanup()
+      } catch (e) {
+        console.error('SIGTERM cleanup 也失败:', e)
+      }
+    }
+  }
+  process.exit(0)
+})
+
+// 捕获未处理异常，尝试清理后退出
+process.on('uncaughtException', async (err) => {
+  console.error('Hook: uncaughtException:', err)
+  if (mainProcessManager) {
+    try {
+      console.log('Hook: uncaughtException -> calling shutdown')
+      await mainProcessManager.shutdown()
+    } catch (e) {
+      console.error('uncaughtException shutdown 失败:', e)
+      try {
+        mainProcessManager.cleanup()
+      } catch (e2) {
+        console.error('uncaughtException cleanup 也失败:', e2)
+      }
+    }
+  }
+  process.exit(1)
+})
+
+process.on('unhandledRejection', async (reason) => {
+  console.error('Hook: unhandledRejection:', reason)
+  if (mainProcessManager) {
+    try {
+      console.log('Hook: unhandledRejection -> calling shutdown')
+      await mainProcessManager.shutdown()
+    } catch (e) {
+      console.error('unhandledRejection shutdown 失败:', e)
+      try {
+        mainProcessManager.cleanup()
+      } catch (e2) {
+        console.error('unhandledRejection cleanup 也失败:', e2)
+      }
+    }
   }
 })
 

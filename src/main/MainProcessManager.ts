@@ -1,4 +1,6 @@
-import { ipcMain } from 'electron'
+import { ipcMain, IpcMainInvokeEvent, app } from 'electron'
+import { join } from 'path'
+import { unlinkSync } from 'fs'
 import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
@@ -23,6 +25,7 @@ export class MainProcessManager {
    */
   async initialize(): Promise<void> {
     try {
+      console.log('userData path:', app.getPath('userData'))
       await this.dbService.initialize()
       console.log('主进程服务初始化完成')
     } catch (error) {
@@ -35,14 +38,32 @@ export class MainProcessManager {
    * 设置IPC处理器
    */
   private setupIpcHandlers(): void {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
+    const protectedHandler =
+      (fn: (event: IpcMainInvokeEvent, ...args: any[]) => Promise<any>) =>
+      async (event: IpcMainInvokeEvent, ...args: any[]) => {
+        if (!this.isAuthenticated) {
+          return { error: '未认证' }
+        }
+        try {
+          // Forward the original ipc event and args to the wrapped handler
+          return await fn.apply(this, [event, ...args])
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : String(e) }
+        }
+      }
+
     // 认证相关
     ipcMain.handle('auth:is-first-run', async () => {
       return await this.initializer.isFirstRun()
     })
 
-    ipcMain.handle('auth:create-user', async (_, username: string, masterPassword: string) => {
+    ipcMain.handle('auth:create-user', async (_, _username: string, masterPassword: string) => {
       try {
-        await this.initializer.initializeWithMasterUser(username, masterPassword)
+        // DatabaseInitializer currently supports setting the master password
+        // via initializeWithMasterPassword(masterPassword). Username is not
+        // stored by the initializer; ignore username for now.
+        await this.initializer.initializeWithMasterPassword(masterPassword)
         this.isAuthenticated = true
         return { success: true }
       } catch (error) {
@@ -53,9 +74,10 @@ export class MainProcessManager {
       }
     })
 
-    ipcMain.handle('auth:login', async (_, username: string, masterPassword: string) => {
+    ipcMain.handle('auth:login', async (_, _username: string, masterPassword: string) => {
       try {
-        const success = await this.initializer.authenticateUser(username, masterPassword)
+        // Verify master password. Username is not used in current design.
+        const success = await this.initializer.verifyMasterPassword(masterPassword)
         this.isAuthenticated = success
         return { success }
       } catch (error) {
@@ -67,7 +89,8 @@ export class MainProcessManager {
     })
 
     ipcMain.handle('auth:logout', () => {
-      this.initializer.logout()
+      // Clear encryption key / lock application
+      this.initializer.lock()
       this.isAuthenticated = false
       return { success: true }
     })
@@ -76,65 +99,100 @@ export class MainProcessManager {
       return this.isAuthenticated
     })
 
+    // Debug: return authentication status and whether a master password hash exists
+    ipcMain.handle('auth:status', async () => {
+      try {
+        const masterHash = await this.dbService.getSetting('master_password_hash')
+        return {
+          isAuthenticated: this.isAuthenticated,
+          hasMasterPasswordHash: !!masterHash
+        }
+      } catch (error) {
+        return {
+          isAuthenticated: this.isAuthenticated,
+          hasMasterPasswordHash: false,
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      }
+    })
+
     // 标签管理
-    ipcMain.handle('tags:get-all', async () => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getAllTags()
-    })
+    ipcMain.handle(
+      'tags:get-all',
+      protectedHandler(async () => await this.dbService.getAllTags())
+    )
 
-    ipcMain.handle('tags:create', async (_, tagData) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.createTag(tagData)
-    })
+    ipcMain.handle(
+      'tags:create',
+      protectedHandler(async (_: any, tagData: any) => await this.dbService.createTag(tagData))
+    )
 
-    ipcMain.handle('tags:update', async (_, id: number, tagData) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.updateTag(id, tagData)
-    })
+    ipcMain.handle(
+      'tags:update',
+      protectedHandler(
+        async (_: any, id: number, tagData: any) => await this.dbService.updateTag(id, tagData)
+      )
+    )
 
-    ipcMain.handle('tags:delete', async (_, id: number) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      await this.dbService.deleteTag(id)
-      return { success: true }
-    })
+    ipcMain.handle(
+      'tags:delete',
+      protectedHandler(async (_: any, id: number) => {
+        await this.dbService.deleteTag(id)
+        return { success: true }
+      })
+    )
 
     // 密码条目管理
-    ipcMain.handle('passwords:search', async (_, searchParams) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.searchPasswordEntries(searchParams)
-    })
+    ipcMain.handle(
+      'passwords:search',
+      protectedHandler(
+        async (_: any, searchParams: any) =>
+          await this.dbService.searchPasswordEntries(searchParams)
+      )
+    )
 
-    ipcMain.handle('passwords:get-by-id', async (_, id: number) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getPasswordEntryById(id)
-    })
+    ipcMain.handle(
+      'passwords:get-by-id',
+      protectedHandler(async (_: any, id: number) => await this.dbService.getPasswordEntryById(id))
+    )
 
-    ipcMain.handle('passwords:create', async (_, entryData) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.createPasswordEntry(entryData)
-    })
+    ipcMain.handle(
+      'passwords:create',
+      protectedHandler(
+        async (_: any, entryData: any) => await this.dbService.createPasswordEntry(entryData)
+      )
+    )
 
-    ipcMain.handle('passwords:update', async (_, id: number, entryData) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.updatePasswordEntry(id, entryData)
-    })
+    ipcMain.handle(
+      'passwords:update',
+      protectedHandler(
+        async (_: any, id: number, entryData: any) =>
+          await this.dbService.updatePasswordEntry(id, entryData)
+      )
+    )
 
-    ipcMain.handle('passwords:delete', async (_, id: number) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      await this.dbService.deletePasswordEntry(id)
-      return { success: true }
-    })
+    ipcMain.handle(
+      'passwords:delete',
+      protectedHandler(async (_: any, id: number) => {
+        await this.dbService.deletePasswordEntry(id)
+        return { success: true }
+      })
+    )
 
-    ipcMain.handle('passwords:mark-used', async (_, id: number) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      await this.dbService.markAsUsed(id)
-      return { success: true }
-    })
+    ipcMain.handle(
+      'passwords:mark-used',
+      protectedHandler(async (_: any, id: number) => {
+        await this.dbService.markAsUsed(id)
+        return { success: true }
+      })
+    )
 
-    ipcMain.handle('passwords:get-history', async (_, entryId: number) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getPasswordHistory(entryId)
-    })
+    ipcMain.handle(
+      'passwords:get-history',
+      protectedHandler(
+        async (_: any, entryId: number) => await this.dbService.getPasswordHistory(entryId)
+      )
+    )
 
     // 密码生成器
     ipcMain.handle('crypto:generate-password', (_, length: number, options) => {
@@ -146,49 +204,94 @@ export class MainProcessManager {
     })
 
     // 应用设置
-    ipcMain.handle('settings:get', async (_, key: string) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getSetting(key)
-    })
+    ipcMain.handle(
+      'settings:get',
+      protectedHandler(async (_: any, key: string) => await this.dbService.getSetting(key))
+    )
 
-    ipcMain.handle('settings:set', async (_, key: string, value: string, description?: string) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      await this.dbService.setSetting(key, value, description)
-      return { success: true }
-    })
+    ipcMain.handle(
+      'settings:set',
+      protectedHandler(async (_: any, key: string, value: string, description?: string) => {
+        await this.dbService.setSetting(key, value, description)
+        return { success: true }
+      })
+    )
 
-    ipcMain.handle('settings:get-all', async () => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getAllSettings()
-    })
+    ipcMain.handle(
+      'settings:get-all',
+      protectedHandler(async () => await this.dbService.getAllSettings())
+    )
 
     // 统计信息
-    ipcMain.handle('stats:get', async () => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getStatistics()
-    })
+    ipcMain.handle(
+      'stats:get',
+      protectedHandler(async () => await this.dbService.getStatistics())
+    )
 
     // 健康检查和维护
     ipcMain.handle('maintenance:health-check', async () => {
       return await this.initializer.healthCheck()
     })
 
-    ipcMain.handle('maintenance:repair', async () => {
-      await this.initializer.repairDatabase()
-      return { success: true }
-    })
+    ipcMain.handle(
+      'maintenance:repair',
+      protectedHandler(async () => {
+        await this.initializer.repairDatabase()
+        return { success: true }
+      })
+    )
 
     // 备份
-    ipcMain.handle('backup:create', async (_, backupPath: string) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      await this.dbService.backup(backupPath)
-      return { success: true }
-    })
+    ipcMain.handle(
+      'backup:create',
+      protectedHandler(async (_: any, backupPath: string) => {
+        await this.dbService.backup(backupPath)
+        return { success: true }
+      })
+    )
 
     // 审计日志
-    ipcMain.handle('audit:get-logs', async (_, limit?: number) => {
-      if (!this.isAuthenticated) throw new Error('未认证')
-      return await this.dbService.getAuditLogs(limit)
+    ipcMain.handle(
+      'audit:get-logs',
+      protectedHandler(async (_: any, limit?: number) => await this.dbService.getAuditLogs(limit))
+    )
+
+    // 新增：记录审计日志（供 preload 调用）
+    ipcMain.handle(
+      'audit:log-action',
+      protectedHandler(async (_: any, input: any) => {
+        await this.dbService.logAction(input)
+        return { success: true }
+      })
+    )
+
+    // 临时：测试 CryptoService 的写回验证流程（encrypt -> decrypt -> compare）
+    // 可从渲染进程调用： window.electron.ipcRenderer.invoke('test:crypto')
+    ipcMain.handle('test:crypto', async () => {
+      try {
+        const userData = app.getPath('userData')
+        const outPath = join(userData, `crypto_test_${Date.now()}.enc`)
+
+        const keySalt = CryptoService.generateSalt()
+        const key = await CryptoService.deriveKey('temporary-test-password', keySalt)
+
+        const payload = Buffer.from(`crypto-test-payload-${Date.now()}`)
+
+        console.log('test:crypto -> writing to', outPath)
+        await CryptoService.encryptBufferToFile(payload, outPath, key)
+
+        console.log('test:crypto -> encrypt+verify succeeded, cleaning up')
+        try {
+          unlinkSync(outPath)
+        } catch (e) {
+          console.warn('test:crypto -> failed to remove temp file:', e)
+        }
+
+        return { success: true, path: outPath }
+      } catch (err) {
+        console.error('test:crypto failed:', err)
+        return { success: false, error: err instanceof Error ? err.message : String(err) }
+      }
     })
   }
 
@@ -196,7 +299,34 @@ export class MainProcessManager {
    * 清理资源
    */
   cleanup(): void {
-    this.dbService.close()
+    console.log('MainProcessManager.cleanup() called — performing synchronous cleanup')
+    // Synchronous cleanup: best-effort close
+    try {
+      this.dbService.close()
+      console.log('MainProcessManager.cleanup(): dbService.close() completed')
+    } catch (e) {
+      console.warn('MainProcessManager.cleanup(): 同步关闭 DB 失败，尝试异步锁定', e)
+    }
+    this.isAuthenticated = false
+  }
+
+  /**
+   * 异步优雅关机：在退出前序列化内存 DB 并加密写回磁盘
+   */
+  async shutdown(): Promise<void> {
+    console.log('MainProcessManager.shutdown() called — attempting to lock and persist DB')
+    try {
+      await this.dbService.lock()
+      console.log('MainProcessManager.shutdown(): dbService.lock() succeeded')
+    } catch (e) {
+      console.error('MainProcessManager.shutdown(): 异步锁定数据库失败，尝试强制关闭:', e)
+      try {
+        this.dbService.close()
+        console.log('MainProcessManager.shutdown(): dbService.close() succeeded as fallback')
+      } catch (e2) {
+        console.error('MainProcessManager.shutdown(): 强制关闭数据库也失败:', e2)
+      }
+    }
     this.isAuthenticated = false
   }
 }
