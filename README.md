@@ -1,5 +1,3 @@
-# passwordmanager
-
 # PasswordManager
 
 这是一个基于 Electron + Vue 3 + TypeScript 的跨平台桌面密码管理器（开发中）。
