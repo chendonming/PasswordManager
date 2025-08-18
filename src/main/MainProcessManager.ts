@@ -256,6 +256,15 @@ export class MainProcessManager {
       protectedHandler(async (_: any, limit?: number) => await this.dbService.getAuditLogs(limit))
     )
 
+    // 新增：记录审计日志（供 preload 调用）
+    ipcMain.handle(
+      'audit:log-action',
+      protectedHandler(async (_: any, input: any) => {
+        await this.dbService.logAction(input)
+        return { success: true }
+      })
+    )
+
     // 临时：测试 CryptoService 的写回验证流程（encrypt -> decrypt -> compare）
     // 可从渲染进程调用： window.electron.ipcRenderer.invoke('test:crypto')
     ipcMain.handle('test:crypto', async () => {

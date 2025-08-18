@@ -13,7 +13,6 @@ onMounted(() => {
 })
 
 // Test functions for IPC calls
-
 const formTitle = ref('Test Entry')
 const formUsername = ref('testuser')
 const formPassword = ref('P@ssw0rd!')
@@ -30,10 +29,10 @@ const addPassword = async (): Promise<void> => {
       url: formUrl.value,
       description: formDescription.value
     }
-    const res = await window.electron.ipcRenderer.invoke('passwords:create', entry)
+
+    const res = await window.api.addPassword(entry)
     console.log('passwords:create response', res)
     if (res && (res.id || res.lastInsertRowid)) {
-      // handle either { id } or better-sqlite3 result with lastInsertRowid
       formId.value = Number(res.id ?? res.lastInsertRowid)
     }
   } catch (err) {
@@ -48,7 +47,8 @@ const deletePassword = async (): Promise<void> => {
       console.warn('请填写要删除的条目 ID')
       return
     }
-    const res = await window.electron.ipcRenderer.invoke('passwords:delete', id)
+
+    const res = await window.api.deletePassword(id)
     console.log('passwords:delete response', res)
   } catch (err) {
     console.error('passwords:delete error', err)
@@ -62,6 +62,7 @@ const editPassword = async (): Promise<void> => {
       console.warn('请填写要更新的条目 ID')
       return
     }
+
     const update = {
       title: formTitle.value,
       username: formUsername.value,
@@ -69,7 +70,8 @@ const editPassword = async (): Promise<void> => {
       url: formUrl.value,
       description: formDescription.value
     }
-    const res = await window.electron.ipcRenderer.invoke('passwords:update', id, update)
+
+    const res = await window.api.updatePassword(id, update)
     console.log('passwords:update response', res)
   } catch (err) {
     console.error('passwords:update error', err)
@@ -79,16 +81,20 @@ const editPassword = async (): Promise<void> => {
 const queryPasswords = async (): Promise<void> => {
   try {
     const params = { page: 1, pageSize: 10, query: '' }
-    const res = await window.electron.ipcRenderer.invoke('passwords:search', params)
+
+    const res = await window.api.queryPasswords(params)
+
     console.log('passwords:search response', res)
-    if (res && Array.isArray(res.items) && res.items.length > 0) {
-      const first = res.items[0]
-      formId.value = Number(first.id)
-      formTitle.value = first.title || ''
-      formUsername.value = first.username || ''
-      formUrl.value = first.url || ''
-      formDescription.value = first.description || ''
-      if (first.password) formPassword.value = first.password
+
+    const searchRes = res as unknown as { entries?: Record<string, unknown>[] }
+    if (searchRes && Array.isArray(searchRes.entries) && searchRes.entries.length > 0) {
+      const first = searchRes.entries[0]
+      formId.value = Number(String((first as Record<string, unknown>).id ?? ''))
+      formTitle.value = String(first.title ?? '')
+      formUsername.value = String(first.username ?? '')
+      formUrl.value = String(first.url ?? '')
+      formDescription.value = String(first.description ?? '')
+      if (first.password) formPassword.value = String(first.password)
     }
   } catch (err) {
     console.error('passwords:search error', err)
@@ -97,25 +103,19 @@ const queryPasswords = async (): Promise<void> => {
 
 const authTest = async (): Promise<void> => {
   try {
-    const isFirst = await window.electron.ipcRenderer.invoke('auth:is-first-run')
+    const isFirst = await window.api.authIsFirstRun()
     console.log('auth:is-first-run ->', isFirst)
     if (isFirst) {
-      // create default test user
-      const res = await window.electron.ipcRenderer.invoke(
-        'auth:create-user',
-        'testuser',
-        'testpassword'
-      )
+      const res = await window.api.authCreateUser('testuser', 'testpassword')
       console.log('auth:create-user ->', res)
     } else {
-      const res = await window.electron.ipcRenderer.invoke('auth:login', 'testuser', 'testpassword')
+      const res = await window.api.authLogin('testuser', 'testpassword')
       console.log('auth:login ->', res)
     }
 
-    // after authentication attempt a search to verify permissions
     try {
       const params = { page: 1, pageSize: 5 }
-      const searchRes = await window.electron.ipcRenderer.invoke('passwords:search', params)
+      const searchRes = await window.api.queryPasswords(params)
       console.log('post-auth passwords:search ->', searchRes)
     } catch (err) {
       console.error('post-auth passwords:search error', err)
@@ -127,7 +127,7 @@ const authTest = async (): Promise<void> => {
 
 const authStatus = async (): Promise<void> => {
   try {
-    const status = await window.electron.ipcRenderer.invoke('auth:status')
+    const status = await window.api.authStatus()
     console.log('auth:status ->', status)
   } catch (err) {
     console.error('auth:status error', err)
@@ -136,7 +136,7 @@ const authStatus = async (): Promise<void> => {
 
 const testCrypto = async (): Promise<void> => {
   try {
-    const res = await window.electron.ipcRenderer.invoke('test:crypto')
+    const res = await window.api.testCrypto()
     console.log('test:crypto ->', res)
     if (res && res.success) {
       alert(`Crypto test succeeded: ${res.path}`)
@@ -153,7 +153,6 @@ const autoSaveTest = async (): Promise<void> => {
   try {
     console.log('AutoSave test: start')
 
-    // 1) 批量新增 3 条目
     const ids: number[] = []
     for (let i = 0; i < 3; i++) {
       const entry = {
@@ -163,32 +162,29 @@ const autoSaveTest = async (): Promise<void> => {
         url: `https://example.com/${i}`,
         description: 'auto-save test'
       }
-      const res = await window.electron.ipcRenderer.invoke('passwords:create', entry)
+
+      const res = await window.api.addPassword(entry)
       console.log('created', res)
       const id = Number(res.id ?? res.lastInsertRowid)
       if (id) ids.push(id)
-      // 快速连续创建以触发防抖
       await new Promise((r) => setTimeout(r, 200))
     }
 
-    // 2) 修改第一个（如果存在）
     if (ids.length > 0) {
       const firstId = ids[0]
-      await window.electron.ipcRenderer.invoke('passwords:update', firstId, {
+      await window.api.invoke('passwords:update', firstId, {
         title: 'AutoSave Modified',
         password: 'ModifiedP@ss!'
       })
       console.log('updated', firstId)
     }
 
-    // 3) 删除最后一个（如果存在）
     if (ids.length > 1) {
       const lastId = ids[ids.length - 1]
-      await window.electron.ipcRenderer.invoke('passwords:delete', lastId)
+      await window.api.invoke('passwords:delete', lastId)
       console.log('deleted', lastId)
     }
 
-    // 4) 等待自动保存触发（等待 6 秒，确保 debounce 触发）
     console.log('waiting for autosave to trigger...')
     await new Promise((r) => setTimeout(r, 6000))
 
