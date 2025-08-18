@@ -8,6 +8,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    PasswordDetail: typeof import('./src/components/PasswordDetail.vue')['default']
+    PasswordList: typeof import('./src/components/PasswordList.vue')['default']
+    Sidebar: typeof import('./src/components/Sidebar.vue')['default']
+    TitleBar: typeof import('./src/components/TitleBar.vue')['default']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }
