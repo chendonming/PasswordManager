@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { readFileSync, existsSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { CryptoService } from './CryptoService'
 import type {
   DatabaseServiceInterface,
@@ -24,6 +24,11 @@ export class DatabaseService implements DatabaseServiceInterface {
   private db: Database.Database | null = null
   private encryptionKey: Buffer | null = null
   private isInitialized = false
+  // Dirty state + auto-save
+  private isDirty: boolean = false
+  private autoSaveTimer: NodeJS.Timeout | null = null
+  private autoSaveDelayMs: number = 3000 // debounce interval (ms)
+  private isSaving: boolean = false
   // file-level encryption paths
   private plainDbPath: string | null = null
   private encryptedDbPath: string | null = null
@@ -157,6 +162,14 @@ export class DatabaseService implements DatabaseServiceInterface {
 
             this.isInitialized = true
             console.log('已创建新的内存 DB 并覆盖 .enc')
+            try {
+              const payload = { timestamp: Date.now(), path: this.encryptedDbPath }
+              BrowserWindow.getAllWindows().forEach((w) => {
+                w.webContents.send('autosave:completed', payload)
+              })
+            } catch (e) {
+              console.warn('通知渲染进程 autosave:completed 失败:', e)
+            }
             return
           } catch (e) {
             console.error('尝试覆盖 .enc 失败:', e)
@@ -261,6 +274,15 @@ export class DatabaseService implements DatabaseServiceInterface {
    * 锁定并加密临时解密数据库（如果存在）然后清理并清除密钥
    */
   async lock(): Promise<void> {
+    // 在锁定前先强制刷新脏数据（如果存在）
+    if (this.encryptionKey) {
+      try {
+        await this.forceSave()
+      } catch (e) {
+        console.warn('lock: 强制保存失败，继续尝试序列化并写回', e)
+      }
+    }
+
     // 如果有打开的内存数据库且有密钥，则序列化内存 DB 并加密回磁盘
     if (this.db && this.encryptedDbPath && this.encryptionKey) {
       try {
@@ -284,6 +306,8 @@ export class DatabaseService implements DatabaseServiceInterface {
         // 清理序列化 Buffer
         CryptoService.clearBuffer(serialized)
 
+        // 成功写回后，清除脏标志
+        this.isDirty = false
         console.log('锁定完成：内存数据库已序列化并加密到磁盘')
       } catch {
         console.error('锁定时加密内存数据库失败')
@@ -340,13 +364,33 @@ export class DatabaseService implements DatabaseServiceInterface {
         this.db = null
 
         // 异步加密写回磁盘（不要阻塞关闭），并在完成后清理敏感 Buffer
-        CryptoService.encryptBufferToFile(serialized, this.encryptedDbPath, this.encryptionKey)
+        CryptoService.encryptBufferToFile(serialized, this.encryptedDbPath!, this.encryptionKey!)
           .then(() => {
             CryptoService.clearBuffer(serialized)
+            this.isDirty = false
             console.log('临时内存数据库已加密并写回磁盘')
+            try {
+              const payload = { timestamp: Date.now(), path: this.encryptedDbPath }
+              BrowserWindow.getAllWindows().forEach((w) => {
+                w.webContents.send('autosave:completed', payload)
+              })
+            } catch (e) {
+              console.warn('通知渲染进程 autosave:completed 失败:', e)
+            }
           })
           .catch((err) => {
             console.error('加密内存数据库失败:', err)
+            try {
+              const payload = {
+                timestamp: Date.now(),
+                error: err instanceof Error ? err.message : String(err)
+              }
+              BrowserWindow.getAllWindows().forEach((w) => {
+                w.webContents.send('autosave:failed', payload)
+              })
+            } catch (e) {
+              console.warn('通知渲染进程 autosave:failed 失败:', e)
+            }
           })
       } catch {
         try {
@@ -502,7 +546,85 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!createdTag) {
       throw new Error('创建标签后无法获取标签信息')
     }
+    // 标记为脏并安排自动保存
+    this.markDirty()
     return createdTag
+  }
+
+  /**
+   * 标记数据库为脏并安排自动保存
+   */
+  private markDirty(): void {
+    this.isDirty = true
+    this.scheduleAutoSave()
+  }
+
+  private scheduleAutoSave(): void {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer)
+    }
+    this.autoSaveTimer = setTimeout(() => {
+      // 如果当前没有保存操作，则触发一次自动保存
+      if (!this.isSaving) {
+        // 使用异步但不阻塞调用方
+        this.flushIfDirty().catch((err) => console.error('自动保存失败:', err))
+      }
+    }, this.autoSaveDelayMs)
+  }
+
+  /**
+   * 如果数据是脏的则序列化并保存（encrypt -> write）
+   */
+  private async flushIfDirty(): Promise<void> {
+    if (!this.isDirty) return
+    if (!this.db) return
+    if (!this.encryptedDbPath || !this.encryptionKey) return
+
+    this.isSaving = true
+    try {
+      const serialized = this.db.serialize()
+
+      // close the db to ensure consistent serialization on disk
+      try {
+        this.db.close()
+      } catch {
+        // ignore
+      }
+      this.db = new Database(serialized, { verbose: console.log })
+
+      await CryptoService.encryptBufferToFile(
+        serialized,
+        this.encryptedDbPath!,
+        this.encryptionKey!
+      )
+      CryptoService.clearBuffer(serialized)
+      this.isDirty = false
+      console.log('自动保存完成：已将内存 DB 序列化并加密回磁盘')
+
+      // Notify renderer windows about autosave completion
+      try {
+        const payload = { timestamp: Date.now(), path: this.encryptedDbPath }
+        BrowserWindow.getAllWindows().forEach((w) => {
+          w.webContents.send('autosave:completed', payload)
+        })
+      } catch (e) {
+        console.warn('通知渲染进程 autosave:completed 失败:', e)
+      }
+    } finally {
+      this.isSaving = false
+    }
+  }
+
+  /**
+   * 强制保存（同步语义：等待完成）
+   */
+  private async forceSave(): Promise<void> {
+    // 取消计划的自动保存
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer)
+      this.autoSaveTimer = null
+    }
+    await this.flushIfDirty()
   }
 
   async updateTag(id: number, input: UpdateTagInput): Promise<Tag> {
@@ -545,6 +667,7 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!updatedTag) {
       throw new Error('更新标签后无法获取标签信息')
     }
+    this.markDirty()
     return updatedTag
   }
 
@@ -559,6 +682,7 @@ export class DatabaseService implements DatabaseServiceInterface {
       table_name: 'tags',
       record_id: id
     })
+    this.markDirty()
   }
 
   async getAllTags(): Promise<Tag[]> {
@@ -651,6 +775,8 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!createdEntry) {
       throw new Error('创建密码条目后无法获取条目信息')
     }
+    // 标记为脏（需要保存）
+    this.markDirty()
     return createdEntry
   }
 
@@ -757,6 +883,7 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!updatedEntry) {
       throw new Error('更新密码条目后无法获取条目信息')
     }
+    this.markDirty()
     return updatedEntry
   }
 
@@ -771,6 +898,7 @@ export class DatabaseService implements DatabaseServiceInterface {
       table_name: 'password_entries',
       record_id: id
     })
+    this.markDirty()
   }
 
   async getPasswordEntryById(id: number): Promise<DecryptedPasswordEntry | null> {
@@ -883,6 +1011,7 @@ export class DatabaseService implements DatabaseServiceInterface {
       WHERE id = ?
     `)
     stmt.run(id)
+    this.markDirty()
   }
 
   /**
@@ -991,6 +1120,7 @@ export class DatabaseService implements DatabaseServiceInterface {
     `)
 
     stmt.run(key, value, description || null)
+    this.markDirty()
   }
 
   async getAllSettings(): Promise<AppSetting[]> {

@@ -148,6 +148,57 @@ const testCrypto = async (): Promise<void> => {
     alert('test:crypto threw an exception; check main process logs')
   }
 }
+
+const autoSaveTest = async (): Promise<void> => {
+  try {
+    console.log('AutoSave test: start')
+
+    // 1) 批量新增 3 条目
+    const ids: number[] = []
+    for (let i = 0; i < 3; i++) {
+      const entry = {
+        title: `AutoSave Test ${Date.now()}-${i}`,
+        username: `user${i}`,
+        password: `P@ss${i}!`,
+        url: `https://example.com/${i}`,
+        description: 'auto-save test'
+      }
+      const res = await window.electron.ipcRenderer.invoke('passwords:create', entry)
+      console.log('created', res)
+      const id = Number(res.id ?? res.lastInsertRowid)
+      if (id) ids.push(id)
+      // 快速连续创建以触发防抖
+      await new Promise((r) => setTimeout(r, 200))
+    }
+
+    // 2) 修改第一个（如果存在）
+    if (ids.length > 0) {
+      const firstId = ids[0]
+      await window.electron.ipcRenderer.invoke('passwords:update', firstId, {
+        title: 'AutoSave Modified',
+        password: 'ModifiedP@ss!'
+      })
+      console.log('updated', firstId)
+    }
+
+    // 3) 删除最后一个（如果存在）
+    if (ids.length > 1) {
+      const lastId = ids[ids.length - 1]
+      await window.electron.ipcRenderer.invoke('passwords:delete', lastId)
+      console.log('deleted', lastId)
+    }
+
+    // 4) 等待自动保存触发（等待 6 秒，确保 debounce 触发）
+    console.log('waiting for autosave to trigger...')
+    await new Promise((r) => setTimeout(r, 6000))
+
+    console.log('AutoSave test: done — 检查主进程日志以确认节流/保存次数')
+    alert('AutoSave test finished — check main process logs for autosave activity')
+  } catch (err) {
+    console.error('AutoSave test error', err)
+    alert('AutoSave test error — 查看控制台')
+  }
+}
 </script>
 
 <template>
@@ -172,6 +223,7 @@ const testCrypto = async (): Promise<void> => {
               <n-button @click="editPassword"> 修改密码 (测试) </n-button>
               <n-button @click="deletePassword"> 删除密码 (测试) </n-button>
               <n-button type="warning" @click="testCrypto"> Crypto 验证 (测试) </n-button>
+              <n-button type="error" @click="autoSaveTest"> AutoSave 测试 </n-button>
               <n-button type="info" @click="authTest"> 认证测试 </n-button>
               <n-button type="default" @click="authStatus"> 认证状态 </n-button>
             </n-space>
