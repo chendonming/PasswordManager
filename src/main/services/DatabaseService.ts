@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
 import { CryptoService } from './CryptoService'
@@ -24,6 +24,10 @@ export class DatabaseService implements DatabaseServiceInterface {
   private db: Database.Database | null = null
   private encryptionKey: Buffer | null = null
   private isInitialized = false
+  // file-level encryption paths
+  private plainDbPath: string | null = null
+  private encryptedDbPath: string | null = null
+  private tempDecryptedPath: string | null = null
 
   constructor() {
     // 构造函数中不进行初始化，需要显式调用 initialize
@@ -37,9 +41,31 @@ export class DatabaseService implements DatabaseServiceInterface {
       // 获取数据库文件路径
       const userDataPath = app.getPath('userData')
       const dbPath = join(userDataPath, 'password_manager.db')
+      const encryptedPath = `${dbPath}.enc`
 
-      // 创建数据库连接
-      this.db = new Database(dbPath, {
+      this.plainDbPath = dbPath
+      this.encryptedDbPath = encryptedPath
+
+      // 如果同时存在明文数据库和加密数据库，优先使用加密文件并删除明文以消除风险
+      if (existsSync(this.plainDbPath) && existsSync(this.encryptedDbPath)) {
+        try {
+          unlinkSync(this.plainDbPath)
+          console.log('发现 .enc，同时删除磁盘明文 .db 文件以保护数据')
+        } catch (e) {
+          console.warn('尝试删除明文 .db 失败:', e)
+        }
+      }
+
+      // 如果存在已加密的数据库文件且密钥尚未设置，则不要在磁盘上打开明文数据库
+      if (existsSync(this.encryptedDbPath) && !this.encryptionKey) {
+        console.log('检测到加密数据库，等待用户登录以解密到内存中')
+        this.isInitialized = false
+        return
+      }
+
+      // 否则，如果明文数据库存在且没有密钥（未加密场景），打开磁盘文件
+      const openPath = dbPath
+      this.db = new Database(openPath, {
         verbose: console.log // 开发环境下启用SQL日志
       })
 
@@ -69,6 +95,214 @@ export class DatabaseService implements DatabaseServiceInterface {
    */
   async setEncryptionKey(masterPassword: string, salt: string): Promise<void> {
     this.encryptionKey = await CryptoService.deriveKey(masterPassword, salt)
+
+    // 如果存在加密的 DB 文件（.enc），解密到内存 Buffer 并用该 Buffer 打开内存数据库
+    if (this.encryptedDbPath && existsSync(this.encryptedDbPath)) {
+      try {
+        const decryptedBuf = await CryptoService.decryptFileToBuffer(
+          this.encryptedDbPath!,
+          this.encryptionKey!
+        )
+
+        // 关闭已打开的连接（如果有）
+        if (this.db) {
+          try {
+            this.db.close()
+          } catch {
+            console.warn('关闭现有 DB 连接时出错')
+          }
+          this.db = null
+        }
+
+        // 使用 Buffer 创建内存数据库
+        this.db = new Database(decryptedBuf, { verbose: console.log })
+
+        // 清理明文 Buffer
+        CryptoService.clearBuffer(decryptedBuf)
+
+        await this.initializeSchema()
+        this.isInitialized = true
+        console.log('已在内存中解密并打开数据库')
+
+        return
+      } catch (err) {
+        console.warn('解密 .enc 文件失败，可能是缺失 meta 或 密钥不匹配:', err)
+        // 如果解密失败且没有明文数据库，出于可用性考虑创建新的内存 DB 并覆盖 .enc
+        if (this.plainDbPath && !existsSync(this.plainDbPath)) {
+          console.log('在没有明文 DB 的情况下覆盖 .enc：创建新的内存数据库并加密写回')
+          // 创建内存 DB
+          try {
+            if (this.db) {
+              try {
+                this.db.close()
+              } catch {
+                // ignore
+              }
+              this.db = null
+            }
+
+            this.db = new Database(':memory:', { verbose: console.log })
+            this.db.exec('PRAGMA foreign_keys = ON')
+            this.db.exec('PRAGMA journal_mode = WAL')
+            this.db.exec('PRAGMA synchronous = FULL')
+            await this.initializeSchema()
+
+            const serialized = this.db.serialize()
+            await CryptoService.encryptBufferToFile(
+              serialized,
+              this.encryptedDbPath!,
+              this.encryptionKey!
+            )
+            CryptoService.clearBuffer(serialized)
+
+            this.isInitialized = true
+            console.log('已创建新的内存 DB 并覆盖 .enc')
+            return
+          } catch (e) {
+            console.error('尝试覆盖 .enc 失败:', e)
+            throw e
+          }
+        }
+        // 否则，将错误抛出供上层处理
+        throw err
+      }
+    }
+
+    // 如果存在明文数据库且这是首次设置主密码：将其加载到内存，序列化并加密为 .enc，然后删除明文文件
+    if (this.plainDbPath && existsSync(this.plainDbPath)) {
+      try {
+        console.log('首次设置主密码：将现有明文数据库加载到内存并加密为 .enc')
+        const plainBuf = readFileSync(this.plainDbPath)
+
+        // 在内存中打开
+        if (this.db) {
+          try {
+            this.db.close()
+          } catch {
+            // ignore
+          }
+        }
+        this.db = new Database(plainBuf, { verbose: console.log })
+
+        // 清理原始读取的明文 Buffer
+        CryptoService.clearBuffer(plainBuf)
+
+        // 序列化内存 DB 并写入加密文件
+        const serialized = this.db.serialize()
+        await CryptoService.encryptBufferToFile(
+          serialized,
+          this.encryptedDbPath!,
+          this.encryptionKey!
+        )
+
+        // 清理序列化 Buffer
+        CryptoService.clearBuffer(serialized)
+
+        // 删除磁盘上的明文文件
+        try {
+          unlinkSync(this.plainDbPath)
+        } catch (e) {
+          console.warn('删除明文数据库失败:', e)
+        }
+
+        await this.initializeSchema()
+        this.isInitialized = true
+        console.log('已将明文 DB 加密并在内存中打开')
+        return
+      } catch (err) {
+        console.error('首次加密数据库失败:', err)
+        throw err
+      }
+    }
+
+    // 如果既没有加密文件也没有明文文件：创建新的内存数据库、初始化并加密写回 .enc
+    try {
+      console.log('未检测到加密或明文数据库文件，创建新的内存数据库并加密写回 .enc')
+
+      // 关闭任何已打开连接
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch {
+          // ignore
+        }
+        this.db = null
+      }
+
+      // 在内存中创建数据库并初始化 schema
+      this.db = new Database(':memory:', { verbose: console.log })
+      this.db.exec('PRAGMA foreign_keys = ON')
+      this.db.exec('PRAGMA journal_mode = WAL')
+      this.db.exec('PRAGMA synchronous = FULL')
+
+      await this.initializeSchema()
+
+      // 序列化并加密为 .enc
+      const serialized = this.db.serialize()
+      if (this.encryptedDbPath) {
+        await CryptoService.encryptBufferToFile(
+          serialized,
+          this.encryptedDbPath,
+          this.encryptionKey!
+        )
+      }
+      CryptoService.clearBuffer(serialized)
+
+      this.isInitialized = true
+      console.log('已创建内存数据库并加密写回 .enc')
+      return
+    } catch (err) {
+      console.error('创建并加密新数据库失败:', err)
+      throw err
+    }
+  }
+
+  /**
+   * 锁定并加密临时解密数据库（如果存在）然后清理并清除密钥
+   */
+  async lock(): Promise<void> {
+    // 如果有打开的内存数据库且有密钥，则序列化内存 DB 并加密回磁盘
+    if (this.db && this.encryptedDbPath && this.encryptionKey) {
+      try {
+        const serialized = this.db.serialize()
+
+        // 先尝试关闭 DB
+        try {
+          this.db.close()
+        } catch {
+          // ignore
+        }
+        this.db = null
+
+        // 将序列化 Buffer 加密写回磁盘
+        await CryptoService.encryptBufferToFile(
+          serialized,
+          this.encryptedDbPath!,
+          this.encryptionKey!
+        )
+
+        // 清理序列化 Buffer
+        CryptoService.clearBuffer(serialized)
+
+        console.log('锁定完成：内存数据库已序列化并加密到磁盘')
+      } catch {
+        console.error('锁定时加密内存数据库失败')
+        throw new Error('锁定时加密内存数据库失败')
+      }
+    } else {
+      // 无内存 DB 或无密钥：仅尝试关闭已打开连接
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch {
+          // ignore
+        }
+        this.db = null
+      }
+    }
+
+    // 清除内存中的密钥
+    this.clearEncryptionKey()
   }
 
   /**
@@ -79,16 +313,58 @@ export class DatabaseService implements DatabaseServiceInterface {
       CryptoService.clearBuffer(this.encryptionKey)
       this.encryptionKey = null
     }
+    // 当清除密钥时：如果有临时解密文件，则需将其加密回原始位置并删除临时文件
+    if (this.tempDecryptedPath && this.encryptedDbPath && this.encryptionKey == null) {
+      // encryption requires key; in lock flow, higher-level代码应先 setEncryptionKey并调用 lock
+      // 这里仅做安全提示，真实加密应在有密钥时进行
+      console.warn(
+        'clearEncryptionKey: 临时解密文件存在，但没有密钥执行加密。请在锁定流程中使用 encryptTempDbWithKey 方法。'
+      )
+    }
   }
 
   /**
    * 关闭数据库连接
    */
   close(): void {
-    if (this.db) {
-      this.db.close()
+    // 如果有内存数据库并且有密钥，则尝试序列化并加密到磁盘（同步触发）
+    if (this.db && this.encryptedDbPath && this.encryptionKey) {
+      try {
+        const serialized = this.db.serialize()
+
+        try {
+          this.db.close()
+        } catch {
+          // ignore
+        }
+        this.db = null
+
+        // 异步加密写回磁盘（不要阻塞关闭），并在完成后清理敏感 Buffer
+        CryptoService.encryptBufferToFile(serialized, this.encryptedDbPath, this.encryptionKey)
+          .then(() => {
+            CryptoService.clearBuffer(serialized)
+            console.log('临时内存数据库已加密并写回磁盘')
+          })
+          .catch((err) => {
+            console.error('加密内存数据库失败:', err)
+          })
+      } catch {
+        try {
+          this.db!.close()
+        } catch {
+          // ignore
+        }
+        this.db = null
+      }
+    } else if (this.db) {
+      try {
+        this.db.close()
+      } catch {
+        // ignore
+      }
       this.db = null
     }
+
     this.clearEncryptionKey()
     this.isInitialized = false
   }
@@ -109,6 +385,48 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!this.encryptionKey) {
       throw new Error('加密密钥尚未设置，请先登录')
     }
+  }
+
+  /**
+   * 检查是否存在加密的数据库文件（用于判断是否已设置主密码且当前未解密）
+   */
+  hasEncryptedDatabase(): boolean {
+    if (!this.encryptedDbPath) return false
+    return existsSync(this.encryptedDbPath)
+  }
+
+  /**
+   * 将认证元数据（salt 和 master password hash）写到磁盘上的 metadata 文件
+   */
+  writeAuthMetadata(masterPasswordHash: string, salt: string): void {
+    if (!this.plainDbPath) return
+    const dir = join(this.plainDbPath, '..')
+    const metaPath = join(dir, 'password_manager.meta.json')
+    try {
+      writeFileSync(metaPath, JSON.stringify({ masterPasswordHash, salt }))
+    } catch (e) {
+      console.warn('写入认证元数据失败:', e)
+    }
+  }
+
+  /**
+   * 读取磁盘上的认证元数据（如果存在）
+   */
+  readAuthMetadata(): { masterPasswordHash: string; salt: string } | null {
+    if (!this.plainDbPath) return null
+    const dir = join(this.plainDbPath, '..')
+    const metaPath = join(dir, 'password_manager.meta.json')
+    if (!existsSync(metaPath)) return null
+    try {
+      const raw = readFileSync(metaPath, 'utf8')
+      const parsed = JSON.parse(raw)
+      if (parsed && parsed.masterPasswordHash && parsed.salt) {
+        return { masterPasswordHash: String(parsed.masterPasswordHash), salt: String(parsed.salt) }
+      }
+    } catch (e) {
+      console.warn('读取认证元数据失败:', e)
+    }
+    return null
   }
 
   /**
@@ -486,11 +804,14 @@ export class DatabaseService implements DatabaseServiceInterface {
     this.ensureInitialized()
     this.ensureEncryptionKey()
 
+    // Defensive: ensure input object exists and provide default pagination/sort
+    input = input || ({} as SearchPasswordsInput)
+
     const whereConditions: string[] = []
     const params: (string | number | boolean)[] = []
 
     // 构建查询条件
-    if (input.query) {
+    if (input.query && typeof input.query === 'string' && input.query.length > 0) {
       whereConditions.push('(pe.title LIKE ? OR pe.url LIKE ?)')
       params.push(`%${input.query}%`, `%${input.query}%`)
     }
@@ -516,8 +837,8 @@ export class DatabaseService implements DatabaseServiceInterface {
     const orderClause = `ORDER BY pe.${sortBy} ${sortOrder}`
 
     // 构建分页
-    const limit = input.limit || 50
-    const offset = input.offset || 0
+    const limit = typeof input.limit === 'number' ? input.limit : 50
+    const offset = typeof input.offset === 'number' ? input.offset : 0
     const limitClause = `LIMIT ${limit} OFFSET ${offset}`
 
     // 查询总数

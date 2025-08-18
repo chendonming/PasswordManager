@@ -1,6 +1,10 @@
 import * as crypto from 'crypto'
 import * as argon2 from 'argon2'
 import { EncryptionResult, DecryptionInput } from '../types/database'
+import { createReadStream, createWriteStream, statSync, renameSync, unlinkSync } from 'fs'
+import { promisify } from 'util'
+import { pipeline as _pipeline } from 'stream'
+const pipeline = promisify(_pipeline)
 
 /**
  * 加密服务类
@@ -277,5 +281,228 @@ export class CryptoService {
       raw: true
     })
     return hash
+  }
+
+  /**
+   * 文件级加密：将整个输入文件加密并输出到 outputPath。
+   * 输出格式： [iv(12 bytes)] [ciphertext bytes ...] [tag(16 bytes)]
+   */
+  static async encryptFile(inputPath: string, outputPath: string, key: Buffer): Promise<void> {
+    const iv = this.generateIV()
+    const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv)
+
+    const input = createReadStream(inputPath)
+    // 临时文件：先写入纯密文（不包含 iv/tag）
+    const tmpCipherPath = `${outputPath}.ct.tmp.${Date.now()}`
+    const cipherOut = createWriteStream(tmpCipherPath, { flags: 'w', mode: 0o600 })
+
+    // 把明文流经 cipher 写入临时密文文件
+    await pipeline(input, cipher, cipherOut)
+
+    // 获取认证标签
+    const tag = cipher.getAuthTag()
+
+    // 组装最终临时文件：iv + ciphertext + tag
+    const finalTmp = `${outputPath}.tmp.${Date.now()}`
+    const finalOut = createWriteStream(finalTmp, { flags: 'w', mode: 0o600 })
+
+    // 写 iv
+    finalOut.write(iv)
+
+    // 将临时密文流入 finalOut，不自动关闭 finalOut
+    const cipherRead = createReadStream(tmpCipherPath)
+    await new Promise<void>((resolve, reject) => {
+      cipherRead.on('error', reject)
+      finalOut.on('error', reject)
+
+      // pipe 不自动结束 finalOut
+      cipherRead.pipe(finalOut, { end: false })
+
+      cipherRead.on('end', () => {
+        // 在流完成后追加 tag 并结束 finalOut
+        finalOut.write(tag, (err) => {
+          if (err) return reject(err)
+          finalOut.end(() => resolve())
+        })
+      })
+    })
+
+    // 原子替换目标文件
+    try {
+      renameSync(finalTmp, outputPath)
+      // 清理临时密文
+      try {
+        unlinkSync(tmpCipherPath)
+      } catch (e) {
+        console.warn('清理临时密文失败:', e)
+      }
+    } catch (e) {
+      // 清理失败需要移除 finalTmp
+      try {
+        unlinkSync(finalTmp)
+      } catch (e) {
+        console.warn('删除临时最终文件失败:', e)
+      }
+      throw e
+    }
+  }
+
+  /**
+   * 解密加密文件到内存 Buffer（用于在内存中恢复数据库）
+   * 不在磁盘上写入明文数据，返回明文 Buffer
+   */
+  static async decryptFileToBuffer(inputPath: string, key: Buffer): Promise<Buffer> {
+    const stats = statSync(inputPath)
+    const fileSize = stats.size
+    if (fileSize < this.IV_LENGTH + 16) throw new Error('加密文件损坏或格式不正确')
+
+    // 读取 iv 和 tag
+    const ivBuffer = Buffer.alloc(this.IV_LENGTH)
+    const tagBuffer = Buffer.alloc(16)
+
+    // 读取 iv
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream(inputPath, { start: 0, end: this.IV_LENGTH - 1 })
+      const bufs: Buffer[] = []
+      rs.on('data', (c) => bufs.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+      rs.on('end', () => {
+        Buffer.concat(bufs).copy(ivBuffer)
+        resolve()
+      })
+      rs.on('error', reject)
+    })
+
+    // 读取 tag
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream(inputPath, { start: fileSize - 16, end: fileSize - 1 })
+      const bufs: Buffer[] = []
+      rs.on('data', (c) => bufs.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+      rs.on('end', () => {
+        Buffer.concat(bufs).copy(tagBuffer)
+        resolve()
+      })
+      rs.on('error', reject)
+    })
+
+    // 读取 ciphertext 到 Buffer
+    const cipherStart = this.IV_LENGTH
+    const cipherEnd = fileSize - 16 - 1
+    const chunks: Buffer[] = []
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream(inputPath, { start: cipherStart, end: cipherEnd })
+      rs.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+      rs.on('end', () => resolve())
+      rs.on('error', reject)
+    })
+
+    const ciphertext = Buffer.concat(chunks)
+
+    // 解密整个 ciphertext Buffer
+    const decipher = crypto.createDecipheriv(this.ALGORITHM, key, ivBuffer)
+    decipher.setAuthTag(tagBuffer)
+
+    const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+
+    // 清理中间敏感数据
+    ivBuffer.fill(0)
+    tagBuffer.fill(0)
+    ciphertext.fill(0)
+
+    return decrypted
+  }
+
+  /**
+   * 文件级解密：读取 inputPath，解析 iv 与 tag 并解密到 outputPath。
+   * 假定格式为: [iv(12)] [ciphertext] [tag(16)]
+   */
+  static async decryptFile(inputPath: string, outputPath: string, key: Buffer): Promise<void> {
+    const stats = statSync(inputPath)
+    const fileSize = stats.size
+    if (fileSize < this.IV_LENGTH + 16) throw new Error('加密文件损坏或格式不正确')
+
+    // 读取 iv 和 tag
+    const ivBuffer = Buffer.alloc(this.IV_LENGTH)
+    const tagBuffer = Buffer.alloc(16)
+
+    // 读取 iv
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream(inputPath, { start: 0, end: this.IV_LENGTH - 1 })
+      const bufs: Buffer[] = []
+      rs.on('data', (c) => bufs.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+      rs.on('end', () => {
+        Buffer.concat(bufs).copy(ivBuffer)
+        resolve()
+      })
+      rs.on('error', reject)
+    })
+
+    // 读取 tag
+    await new Promise<void>((resolve, reject) => {
+      const rs = createReadStream(inputPath, { start: fileSize - 16, end: fileSize - 1 })
+      const bufs: Buffer[] = []
+      rs.on('data', (c) => bufs.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+      rs.on('end', () => {
+        Buffer.concat(bufs).copy(tagBuffer)
+        resolve()
+      })
+      rs.on('error', reject)
+    })
+
+    const decipher = crypto.createDecipheriv(this.ALGORITHM, key, ivBuffer)
+    decipher.setAuthTag(tagBuffer)
+
+    const cipherStart = this.IV_LENGTH
+    const cipherEnd = fileSize - 16 - 1
+    const cipherStream = createReadStream(inputPath, { start: cipherStart, end: cipherEnd })
+    const outStream = createWriteStream(outputPath, { flags: 'w', mode: 0o600 })
+
+    await pipeline(cipherStream, decipher, outStream)
+  }
+
+  /**
+   * 将明文 Buffer 加密并写入到磁盘（原子替换 outputPath）
+   * 输入为 Buffer（明文），输出格式同 encryptFile: iv + ciphertext + tag
+   */
+  static async encryptBufferToFile(
+    plainBuffer: Buffer,
+    outputPath: string,
+    key: Buffer
+  ): Promise<void> {
+    const iv = this.generateIV()
+    const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv)
+
+    // 加密得到 ciphertext Buffer
+    const ciphertext = Buffer.concat([cipher.update(plainBuffer), cipher.final()])
+    const tag = cipher.getAuthTag()
+
+    // 组装最终临时文件：iv + ciphertext + tag
+    const finalTmp = `${outputPath}.tmp.${Date.now()}`
+    const finalOut = createWriteStream(finalTmp, { flags: 'w', mode: 0o600 })
+
+    await new Promise<void>((resolve, reject) => {
+      finalOut.on('error', reject)
+      finalOut.write(iv)
+      finalOut.write(ciphertext)
+      finalOut.write(tag)
+      finalOut.end(() => resolve())
+    })
+
+    // 原子替换目标文件
+    try {
+      renameSync(finalTmp, outputPath)
+    } catch (e) {
+      try {
+        unlinkSync(finalTmp)
+      } catch {
+        /* ignore cleanup errors */
+      }
+      throw e
+    } finally {
+      // 清理敏感内存
+      plainBuffer.fill(0)
+      ciphertext.fill(0)
+      iv.fill(0)
+      tag.fill(0)
+    }
   }
 }

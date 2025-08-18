@@ -17,7 +17,16 @@ export class DatabaseInitializer {
    */
   async isFirstRun(): Promise<boolean> {
     try {
-      // 检查是否已设置主密码
+      // 优先检查磁盘 metadata（更可靠，当没有 metadata 时需要交互决定）
+      const meta = this.dbService.readAuthMetadata()
+      if (meta) return false
+
+      // 如果存在加密 DB 但没有 metadata，认为需要进行首次设置（创建 meta 或恢复）
+      if (this.dbService.hasEncryptedDatabase()) {
+        return true
+      }
+
+      // 回退到数据库设置检查（例如未加密场景）
       const masterPasswordHash = await this.dbService.getSetting('master_password_hash')
       return !masterPasswordHash
     } catch (error) {
@@ -38,8 +47,8 @@ export class DatabaseInitializer {
       const masterPasswordHash = await CryptoService.hashMasterPassword(masterPassword, salt)
 
       // 保存主密码哈希和盐值
-      await this.dbService.setSetting('master_password_hash', masterPasswordHash, '主密码哈希')
-      await this.dbService.setSetting('master_password_salt', salt, '主密码盐值')
+      // 将认证元数据写到磁盘上的 meta 文件，以便在尚未解密数据库时也能验证
+      this.dbService.writeAuthMetadata(masterPasswordHash, salt)
 
       // 设置加密密钥
       await this.dbService.setEncryptionKey(masterPassword, salt)
@@ -60,12 +69,21 @@ export class DatabaseInitializer {
    */
   async verifyMasterPassword(masterPassword: string): Promise<boolean> {
     try {
-      const masterPasswordHash = await this.dbService.getSetting('master_password_hash')
-      const salt = await this.dbService.getSetting('master_password_salt')
+      // 如果存在磁盘上的 metadata（在未解密场景下保存的 master hash 与 salt），则优先使用
+      const meta = this.dbService.readAuthMetadata()
+      let masterPasswordHash: string | null = null
+      let salt: string | null = null
 
-      if (!masterPasswordHash || !salt) {
+      if (meta) {
+        masterPasswordHash = meta.masterPasswordHash
+        salt = meta.salt
+      } else {
+        // 无磁盘 metadata 时无法在未解密数据库的情况下验证主密码
+        console.warn('没有找到认证元数据，且数据库未解密；无法验证主密码')
         return false
       }
+
+      if (!masterPasswordHash || !salt) return false
 
       const isValid = await CryptoService.verifyMasterPassword(
         masterPassword,
@@ -88,8 +106,8 @@ export class DatabaseInitializer {
   /**
    * 锁定应用（清除内存中的加密密钥）
    */
-  lock(): void {
-    this.dbService.clearEncryptionKey()
+  async lock(): Promise<void> {
+    await this.dbService.lock()
   }
 
   /**
