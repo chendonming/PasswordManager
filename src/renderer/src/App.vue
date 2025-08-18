@@ -128,7 +128,180 @@
 
       <!-- 主内容区 -->
       <div class="flex-1 bg-white">
-        <div class="p-6">
+        <!-- 全部密码视图 -->
+        <div v-if="activeTab === 'all'" class="p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-semibold text-gray-900">全部密码</h2>
+            <button
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+            >
+              添加密码
+            </button>
+          </div>
+
+          <div class="grid gap-4">
+            <div
+              v-for="password in mockPasswords"
+              :key="password.id"
+              class="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors duration-200"
+            >
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <svg
+                      class="w-5 h-5 text-gray-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 class="font-medium text-gray-900">{{ password.title }}</h3>
+                    <p class="text-sm text-gray-500">{{ password.username }}</p>
+                  </div>
+                </div>
+                <button
+                  class="px-3 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors duration-200"
+                >
+                  复制密码
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 收藏夹视图 -->
+        <div v-else-if="activeTab === 'favorites'" class="p-6">
+          <div class="text-center py-12">
+            <svg
+              class="w-16 h-16 mx-auto mb-4 text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+              />
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">暂无收藏的密码</h3>
+            <p class="text-gray-500">将重要的密码添加到收藏夹，方便快速访问</p>
+          </div>
+        </div>
+
+        <!-- 最近使用视图 -->
+        <div v-else-if="activeTab === 'recent'" class="p-6">
+          <div class="text-center py-12">
+            <svg
+              class="w-16 h-16 mx-auto mb-4 text-gray-300"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">暂无最近使用的密码</h3>
+            <p class="text-gray-500">最近访问的密码将在这里显示</p>
+          </div>
+        </div>
+
+        <!-- 密码生成器视图 -->
+        <div v-else-if="activeTab === 'generator'" class="p-6">
+          <div class="max-w-md mx-auto">
+            <h2 class="text-xl font-semibold text-gray-900 mb-6">密码生成器</h2>
+
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">生成的密码</label>
+                <div class="flex">
+                  <input
+                    v-model="generatedPassword"
+                    type="text"
+                    readonly
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg bg-gray-50 font-mono text-sm"
+                  />
+                  <button
+                    class="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 transition-colors duration-200"
+                  >
+                    复制
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2"
+                  >密码长度: {{ passwordLength }}</label
+                >
+                <input
+                  v-model="passwordLength"
+                  type="range"
+                  min="6"
+                  max="50"
+                  class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+
+              <div class="space-y-2">
+                <label class="flex items-center">
+                  <input
+                    v-model="includeUppercase"
+                    type="checkbox"
+                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">包含大写字母 (A-Z)</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="includeLowercase"
+                    type="checkbox"
+                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">包含小写字母 (a-z)</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="includeNumbers"
+                    type="checkbox"
+                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">包含数字 (0-9)</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    v-model="includeSymbols"
+                    type="checkbox"
+                    class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">包含符号 (!@#$%^&*)</span>
+                </label>
+              </div>
+
+              <button
+                class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors duration-200"
+                @click="generatePassword"
+              >
+                生成新密码
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 默认/欢迎视图 -->
+        <div v-else class="p-6">
           <div class="text-center">
             <svg
               class="w-24 h-24 mx-auto mb-4 text-gray-300"
@@ -227,10 +400,20 @@ import { ref } from 'vue'
 const activeTab = ref('all')
 const searchQuery = ref('')
 
+// 密码生成器相关状态
+const generatedPassword = ref('P@ssw0rd123!')
+const passwordLength = ref(12)
+const includeUppercase = ref(true)
+const includeLowercase = ref(true)
+const includeNumbers = ref(true)
+const includeSymbols = ref(false)
+
 // 模拟数据
 const mockPasswords = [
   { id: 1, title: 'GitHub', username: 'user@example.com' },
-  { id: 2, title: '网易邮箱', username: 'example@163.com' }
+  { id: 2, title: '网易邮箱', username: 'example@163.com' },
+  { id: 3, title: 'Google', username: 'myemail@gmail.com' },
+  { id: 4, title: '微信公众平台', username: 'admin@company.com' }
 ]
 
 const navigationItems = [
@@ -239,6 +422,26 @@ const navigationItems = [
   { id: 'recent', label: '最近使用', icon: 'ClockIcon' },
   { id: 'generator', label: '密码生成器', icon: 'CogIcon' }
 ]
+
+// 密码生成器方法
+const generatePassword = (): void => {
+  let charset = ''
+  if (includeUppercase.value) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  if (includeLowercase.value) charset += 'abcdefghijklmnopqrstuvwxyz'
+  if (includeNumbers.value) charset += '0123456789'
+  if (includeSymbols.value) charset += '!@#$%^&*()_+-=[]{}|;:,.<>?'
+
+  if (charset === '') {
+    charset = 'abcdefghijklmnopqrstuvwxyz' // 默认至少包含小写字母
+    includeLowercase.value = true
+  }
+
+  let result = ''
+  for (let i = 0; i < passwordLength.value; i++) {
+    result += charset.charAt(Math.floor(Math.random() * charset.length))
+  }
+  generatedPassword.value = result
+}
 
 // 图标组件映射
 const iconComponents = {
