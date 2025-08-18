@@ -231,10 +231,6 @@ export interface DatabaseServiceInterface {
   initialize(): Promise<void>
   close(): void
 
-  // 用户管理
-  createUser(input: CreateUserInput): Promise<User>
-  getUserByUsername(username: string): Promise<User | null>
-
   // 标签管理
   createTag(input: CreateTagInput): Promise<Tag>
   updateTag(id: number, input: UpdateTagInput): Promise<Tag>

@@ -1,17 +1,6 @@
 -- 密码管理器数据库架构设计
 -- 采用 SQLite，确保数据完整性和安全性
-
--- =====================================
--- 用户表（虽然是单用户应用，但保留扩展性）
--- =====================================
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    master_password_hash TEXT NOT NULL,  -- Argon2 哈希
-    salt TEXT NOT NULL,                  -- 密钥派生盐值
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+-- 单用户本地应用，主密码通过设置表管理
 
 -- =====================================
 -- 标签表

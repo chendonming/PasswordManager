@@ -5,8 +5,6 @@ import { app } from 'electron'
 import { CryptoService } from './CryptoService'
 import type {
   DatabaseServiceInterface,
-  User,
-  CreateUserInput,
   Tag,
   CreateTagInput,
   UpdateTagInput,
@@ -162,46 +160,6 @@ export class DatabaseService implements DatabaseServiceInterface {
   }
 
   // =====================================
-  // 用户管理
-  // =====================================
-
-  async createUser(input: CreateUserInput): Promise<User> {
-    this.ensureInitialized()
-
-    const stmt = this.db!.prepare(`
-      INSERT INTO users (username, master_password_hash, salt)
-      VALUES (?, ?, ?)
-    `)
-
-    const result = stmt.run(input.username, input.master_password_hash, input.salt)
-
-    // 记录审计日志
-    await this.logAction({
-      action: 'CREATE',
-      table_name: 'users',
-      record_id: Number(result.lastInsertRowid),
-      details: JSON.stringify({ username: input.username })
-    })
-
-    return this.getUserById(Number(result.lastInsertRowid))!
-  }
-
-  async getUserByUsername(username: string): Promise<User | null> {
-    this.ensureInitialized()
-
-    const stmt = this.db!.prepare('SELECT * FROM users WHERE username = ?')
-    const user = stmt.get(username) as User | undefined
-
-    return user || null
-  }
-
-  private getUserById(id: number): User | null {
-    const stmt = this.db!.prepare('SELECT * FROM users WHERE id = ?')
-    const user = stmt.get(id) as User | undefined
-    return user || null
-  }
-
-  // =====================================
   // 标签管理
   // =====================================
 
@@ -311,9 +269,11 @@ export class DatabaseService implements DatabaseServiceInterface {
 
     const transaction = this.db!.transaction(() => {
       // 加密敏感字段
-      const encryptedUsername = input.username ? this.encryptField(input.username) : null
+      // For now store username and description as plaintext to avoid storing
+      // separate IV/tag for each field. Only password is encrypted with AES-GCM.
+      const encryptedUsername = input.username || null
       const encryptedPassword = this.encryptField(input.password)
-      const encryptedDescription = input.description ? this.encryptField(input.description) : null
+      const encryptedDescription = input.description || null
 
       // 计算密码强度
       const passwordStrength = CryptoService.evaluatePasswordStrength(input.password)
@@ -326,17 +286,19 @@ export class DatabaseService implements DatabaseServiceInterface {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
-      const result = stmt.run(
+      const params = [
         input.title,
-        encryptedUsername?.encrypted || null,
+        encryptedUsername || null,
         encryptedPassword.encrypted,
         input.url || null,
-        encryptedDescription?.encrypted || null,
+        encryptedDescription || null,
         encryptedPassword.iv, // 使用密码的IV作为主IV
         encryptedPassword.tag, // 使用密码的tag作为主tag
-        input.is_favorite || false,
+        input.is_favorite ? 1 : 0,
         passwordStrength
-      )
+      ]
+
+      const result = stmt.run(...params)
 
       const entryId = Number(result.lastInsertRowid)
 
@@ -431,7 +393,7 @@ export class DatabaseService implements DatabaseServiceInterface {
 
       if (input.is_favorite !== undefined) {
         updateFields.push('is_favorite = ?')
-        values.push(input.is_favorite)
+        values.push(input.is_favorite ? 1 : 0)
       }
 
       updateFields.push('updated_at = CURRENT_TIMESTAMP')
@@ -543,7 +505,7 @@ export class DatabaseService implements DatabaseServiceInterface {
 
     if (input.is_favorite !== undefined) {
       whereConditions.push('pe.is_favorite = ?')
-      params.push(input.is_favorite)
+      params.push(input.is_favorite ? 1 : 0)
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -636,14 +598,12 @@ export class DatabaseService implements DatabaseServiceInterface {
     return {
       id: row.id,
       title: row.title,
-      username: row.username
-        ? this.decryptField(row.username, row.encryption_iv, row.encryption_tag)
-        : undefined,
+      // username and description are stored as plaintext in current schema
+      username: row.username || undefined,
+      // password is encrypted using encryption_iv/encryption_tag
       password: this.decryptField(row.password, row.encryption_iv, row.encryption_tag),
       url: row.url,
-      description: row.description
-        ? this.decryptField(row.description, row.encryption_iv, row.encryption_tag)
-        : undefined,
+      description: row.description || undefined,
       is_favorite: Boolean(row.is_favorite),
       last_used_at: row.last_used_at,
       password_strength: row.password_strength,

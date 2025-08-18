@@ -40,9 +40,12 @@ export class MainProcessManager {
       return await this.initializer.isFirstRun()
     })
 
-    ipcMain.handle('auth:create-user', async (_, username: string, masterPassword: string) => {
+    ipcMain.handle('auth:create-user', async (_, _username: string, masterPassword: string) => {
       try {
-        await this.initializer.initializeWithMasterUser(username, masterPassword)
+        // DatabaseInitializer currently supports setting the master password
+        // via initializeWithMasterPassword(masterPassword). Username is not
+        // stored by the initializer; ignore username for now.
+        await this.initializer.initializeWithMasterPassword(masterPassword)
         this.isAuthenticated = true
         return { success: true }
       } catch (error) {
@@ -53,9 +56,10 @@ export class MainProcessManager {
       }
     })
 
-    ipcMain.handle('auth:login', async (_, username: string, masterPassword: string) => {
+    ipcMain.handle('auth:login', async (_, _username: string, masterPassword: string) => {
       try {
-        const success = await this.initializer.authenticateUser(username, masterPassword)
+        // Verify master password. Username is not used in current design.
+        const success = await this.initializer.verifyMasterPassword(masterPassword)
         this.isAuthenticated = success
         return { success }
       } catch (error) {
@@ -67,13 +71,31 @@ export class MainProcessManager {
     })
 
     ipcMain.handle('auth:logout', () => {
-      this.initializer.logout()
+      // Clear encryption key / lock application
+      this.initializer.lock()
       this.isAuthenticated = false
       return { success: true }
     })
 
     ipcMain.handle('auth:is-authenticated', () => {
       return this.isAuthenticated
+    })
+
+    // Debug: return authentication status and whether a master password hash exists
+    ipcMain.handle('auth:status', async () => {
+      try {
+        const masterHash = await this.dbService.getSetting('master_password_hash')
+        return {
+          isAuthenticated: this.isAuthenticated,
+          hasMasterPasswordHash: !!masterHash
+        }
+      } catch (error) {
+        return {
+          isAuthenticated: this.isAuthenticated,
+          hasMasterPasswordHash: false,
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      }
     })
 
     // 标签管理

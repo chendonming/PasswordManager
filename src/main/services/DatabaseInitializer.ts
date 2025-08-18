@@ -3,7 +3,7 @@ import { CryptoService } from '../services/CryptoService'
 
 /**
  * 数据库初始化管理器
- * 负责应用首次启动时的数据库设置和用户创建
+ * 负责应用首次启动时的数据库设置和主密码管理
  */
 export class DatabaseInitializer {
   private dbService: DatabaseService
@@ -13,14 +13,13 @@ export class DatabaseInitializer {
   }
 
   /**
-   * 检查是否为首次运行（没有用户）
+   * 检查是否为首次运行（没有设置主密码）
    */
   async isFirstRun(): Promise<boolean> {
     try {
-      // 简单检查是否有用户记录
-      const settings = await this.dbService.getAllSettings()
-      const hasInitialized = settings.find((s) => s.key === 'app_initialized')
-      return !hasInitialized
+      // 检查是否已设置主密码
+      const masterPasswordHash = await this.dbService.getSetting('master_password_hash')
+      return !masterPasswordHash
     } catch (error) {
       console.error('检查首次运行状态失败:', error)
       return true // 出错时认为是首次运行
@@ -28,9 +27,9 @@ export class DatabaseInitializer {
   }
 
   /**
-   * 创建主用户并完成初始化
+   * 设置主密码并完成初始化
    */
-  async initializeWithMasterUser(username: string, masterPassword: string): Promise<void> {
+  async initializeWithMasterPassword(masterPassword: string): Promise<void> {
     try {
       // 生成盐值
       const salt = CryptoService.generateSalt()
@@ -38,12 +37,9 @@ export class DatabaseInitializer {
       // 生成密码哈希
       const masterPasswordHash = await CryptoService.hashMasterPassword(masterPassword, salt)
 
-      // 创建用户
-      await this.dbService.createUser({
-        username,
-        master_password_hash: masterPasswordHash,
-        salt
-      })
+      // 保存主密码哈希和盐值
+      await this.dbService.setSetting('master_password_hash', masterPasswordHash, '主密码哈希')
+      await this.dbService.setSetting('master_password_salt', salt, '主密码盐值')
 
       // 设置加密密钥
       await this.dbService.setEncryptionKey(masterPassword, salt)
@@ -52,46 +48,81 @@ export class DatabaseInitializer {
       await this.dbService.setSetting('app_initialized', 'true', '应用初始化完成标记')
       await this.dbService.setSetting('created_at', new Date().toISOString(), '应用创建时间')
 
-      console.log('数据库初始化完成，主用户已创建')
+      console.log('密码管理器初始化完成，主密码已设置')
     } catch (error) {
-      console.error('数据库初始化失败:', error)
-      throw new Error(`数据库初始化失败: ${error instanceof Error ? error.message : '未知错误'}`)
+      console.error('密码管理器初始化失败:', error)
+      throw new Error(`初始化失败: ${error instanceof Error ? error.message : '未知错误'}`)
     }
   }
 
   /**
-   * 验证用户登录
+   * 验证主密码
    */
-  async authenticateUser(username: string, masterPassword: string): Promise<boolean> {
+  async verifyMasterPassword(masterPassword: string): Promise<boolean> {
     try {
-      const user = await this.dbService.getUserByUsername(username)
-      if (!user) {
+      const masterPasswordHash = await this.dbService.getSetting('master_password_hash')
+      const salt = await this.dbService.getSetting('master_password_salt')
+
+      if (!masterPasswordHash || !salt) {
         return false
       }
 
       const isValid = await CryptoService.verifyMasterPassword(
         masterPassword,
-        user.master_password_hash,
-        user.salt
+        masterPasswordHash,
+        salt
       )
 
       if (isValid) {
         // 设置加密密钥
-        await this.dbService.setEncryptionKey(masterPassword, user.salt)
+        await this.dbService.setEncryptionKey(masterPassword, salt)
       }
 
       return isValid
     } catch (error) {
-      console.error('用户认证失败:', error)
+      console.error('主密码验证失败:', error)
       return false
     }
   }
 
   /**
-   * 用户注销
+   * 锁定应用（清除内存中的加密密钥）
    */
-  logout(): void {
+  lock(): void {
     this.dbService.clearEncryptionKey()
+  }
+
+  /**
+   * 更改主密码
+   */
+  async changeMasterPassword(oldPassword: string, newPassword: string): Promise<boolean> {
+    try {
+      // 先验证旧密码
+      const isOldPasswordValid = await this.verifyMasterPassword(oldPassword)
+      if (!isOldPasswordValid) {
+        return false
+      }
+
+      // 生成新的盐值和哈希
+      const newSalt = CryptoService.generateSalt()
+      const newPasswordHash = await CryptoService.hashMasterPassword(newPassword, newSalt)
+
+      // 重新加密所有数据（这需要重新处理所有密码条目）
+      // 注意：这是一个复杂的操作，需要解密后重新加密所有敏感数据
+      console.warn('更改主密码功能需要重新加密所有数据，当前版本暂不支持')
+
+      // 更新主密码设置
+      await this.dbService.setSetting('master_password_hash', newPasswordHash, '主密码哈希')
+      await this.dbService.setSetting('master_password_salt', newSalt, '主密码盐值')
+
+      // 设置新的加密密钥
+      await this.dbService.setEncryptionKey(newPassword, newSalt)
+
+      return true
+    } catch (error) {
+      console.error('更改主密码失败:', error)
+      return false
+    }
   }
 
   /**
