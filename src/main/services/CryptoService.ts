@@ -470,6 +470,8 @@ export class CryptoService {
   ): Promise<void> {
     const iv = this.generateIV()
     const cipher = crypto.createCipheriv(this.ALGORITHM, key, iv)
+    // 保留原始明文的副本以便验证（在写回后解密比对）
+    const originalCopy = Buffer.from(plainBuffer)
 
     // 加密得到 ciphertext Buffer
     const ciphertext = Buffer.concat([cipher.update(plainBuffer), cipher.final()])
@@ -490,6 +492,33 @@ export class CryptoService {
     // 原子替换目标文件
     try {
       renameSync(finalTmp, outputPath)
+      // 写回后立即验证：解密刚写入的文件并与原始明文比较，确保写入完整性
+      try {
+        const decrypted = await this.decryptFileToBuffer(outputPath, key)
+        const isEqual =
+          decrypted.length === originalCopy.length &&
+          crypto.timingSafeEqual(decrypted, originalCopy)
+
+        // 清理解密缓冲
+        this.clearBuffer(decrypted)
+
+        if (!isEqual) {
+          try {
+            unlinkSync(outputPath)
+          } catch (e) {
+            console.error('验证失败，尝试删除损坏的输出文件失败:', e)
+          }
+          throw new Error('写回后验证失败：解密数据与原始数据不匹配')
+        }
+      } catch (verErr) {
+        // 如果验证过程中出现任何错误，尝试删除输出文件并抛出错误
+        try {
+          unlinkSync(outputPath)
+        } catch (e) {
+          console.warn('验证期间删除输出文件失败:', e)
+        }
+        throw verErr
+      }
     } catch (e) {
       try {
         unlinkSync(finalTmp)
@@ -499,10 +528,33 @@ export class CryptoService {
       throw e
     } finally {
       // 清理敏感内存
-      plainBuffer.fill(0)
-      ciphertext.fill(0)
-      iv.fill(0)
-      tag.fill(0)
+      try {
+        // original plainBuffer may be large; ensure we zero it
+        plainBuffer.fill(0)
+      } catch {
+        /* ignore */
+      }
+      try {
+        // 清理原始副本
+        originalCopy.fill(0)
+      } catch {
+        /* ignore */
+      }
+      try {
+        ciphertext.fill(0)
+      } catch {
+        /* ignore */
+      }
+      try {
+        iv.fill(0)
+      } catch {
+        /* ignore */
+      }
+      try {
+        tag.fill(0)
+      } catch {
+        /* ignore */
+      }
     }
   }
 }

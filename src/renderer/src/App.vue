@@ -133,6 +133,21 @@ const authStatus = async (): Promise<void> => {
     console.error('auth:status error', err)
   }
 }
+
+const testCrypto = async (): Promise<void> => {
+  try {
+    const res = await window.electron.ipcRenderer.invoke('test:crypto')
+    console.log('test:crypto ->', res)
+    if (res && res.success) {
+      alert(`Crypto test succeeded: ${res.path}`)
+    } else {
+      alert(`Crypto test failed: ${res?.error ?? 'unknown'}`)
+    }
+  } catch (err) {
+    console.error('test:crypto error', err)
+    alert('test:crypto threw an exception; check main process logs')
+  }
+}
 </script>
 
 <template>
@@ -156,6 +171,7 @@ const authStatus = async (): Promise<void> => {
               <n-button @click="queryPasswords"> 查询密码 (测试) </n-button>
               <n-button @click="editPassword"> 修改密码 (测试) </n-button>
               <n-button @click="deletePassword"> 删除密码 (测试) </n-button>
+              <n-button type="warning" @click="testCrypto"> Crypto 验证 (测试) </n-button>
               <n-button type="info" @click="authTest"> 认证测试 </n-button>
               <n-button type="default" @click="authStatus"> 认证状态 </n-button>
             </n-space>

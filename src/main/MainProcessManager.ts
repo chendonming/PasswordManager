@@ -1,6 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { ipcMain } from 'electron'
-import { app } from 'electron'
+import { ipcMain, IpcMainInvokeEvent, app } from 'electron'
+import { join } from 'path'
+import { unlinkSync } from 'fs'
 import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
@@ -38,16 +38,16 @@ export class MainProcessManager {
    * 设置IPC处理器
    */
   private setupIpcHandlers(): void {
+    /* eslint-disable @typescript-eslint/no-explicit-any */
     const protectedHandler =
-      (fn: (...args: any[]) => Promise<any>) =>
-      async (_event: any, ...args: any[]) => {
+      (fn: (event: IpcMainInvokeEvent, ...args: any[]) => Promise<any>) =>
+      async (event: IpcMainInvokeEvent, ...args: any[]) => {
         if (!this.isAuthenticated) {
           return { error: '未认证' }
         }
         try {
-          // Ensure the original ipc event is forwarded as the first argument
-          // so wrapped handlers that expect (event, ...args) receive correct params.
-          return await fn.apply(this, [_event, ...args])
+          // Forward the original ipc event and args to the wrapped handler
+          return await fn.apply(this, [event, ...args])
         } catch (e) {
           return { error: e instanceof Error ? e.message : String(e) }
         }
@@ -255,6 +255,35 @@ export class MainProcessManager {
       'audit:get-logs',
       protectedHandler(async (_: any, limit?: number) => await this.dbService.getAuditLogs(limit))
     )
+
+    // 临时：测试 CryptoService 的写回验证流程（encrypt -> decrypt -> compare）
+    // 可从渲染进程调用： window.electron.ipcRenderer.invoke('test:crypto')
+    ipcMain.handle('test:crypto', async () => {
+      try {
+        const userData = app.getPath('userData')
+        const outPath = join(userData, `crypto_test_${Date.now()}.enc`)
+
+        const keySalt = CryptoService.generateSalt()
+        const key = await CryptoService.deriveKey('temporary-test-password', keySalt)
+
+        const payload = Buffer.from(`crypto-test-payload-${Date.now()}`)
+
+        console.log('test:crypto -> writing to', outPath)
+        await CryptoService.encryptBufferToFile(payload, outPath, key)
+
+        console.log('test:crypto -> encrypt+verify succeeded, cleaning up')
+        try {
+          unlinkSync(outPath)
+        } catch (e) {
+          console.warn('test:crypto -> failed to remove temp file:', e)
+        }
+
+        return { success: true, path: outPath }
+      } catch (err) {
+        console.error('test:crypto failed:', err)
+        return { success: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    })
   }
 
   /**
