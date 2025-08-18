@@ -261,7 +261,34 @@ export class MainProcessManager {
    * 清理资源
    */
   cleanup(): void {
-    this.dbService.close()
+    console.log('MainProcessManager.cleanup() called — performing synchronous cleanup')
+    // Synchronous cleanup: best-effort close
+    try {
+      this.dbService.close()
+      console.log('MainProcessManager.cleanup(): dbService.close() completed')
+    } catch (e) {
+      console.warn('MainProcessManager.cleanup(): 同步关闭 DB 失败，尝试异步锁定', e)
+    }
+    this.isAuthenticated = false
+  }
+
+  /**
+   * 异步优雅关机：在退出前序列化内存 DB 并加密写回磁盘
+   */
+  async shutdown(): Promise<void> {
+    console.log('MainProcessManager.shutdown() called — attempting to lock and persist DB')
+    try {
+      await this.dbService.lock()
+      console.log('MainProcessManager.shutdown(): dbService.lock() succeeded')
+    } catch (e) {
+      console.error('MainProcessManager.shutdown(): 异步锁定数据库失败，尝试强制关闭:', e)
+      try {
+        this.dbService.close()
+        console.log('MainProcessManager.shutdown(): dbService.close() succeeded as fallback')
+      } catch (e2) {
+        console.error('MainProcessManager.shutdown(): 强制关闭数据库也失败:', e2)
+      }
+    }
     this.isAuthenticated = false
   }
 }
