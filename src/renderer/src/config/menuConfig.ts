@@ -62,8 +62,10 @@ export const defaultMenuConfig: MenuConfig[] = [
             id: 'import-chrome',
             label: 'Chrome浏览器',
             icon: '🌐',
-            description: '即将支持',
-            disabled: true
+            iconClass: 'text-blue-500',
+            description: '从Chrome导出的CSV文件导入',
+            action: 'chrome',
+            actionType: 'import'
           },
           {
             id: 'import-firefox',

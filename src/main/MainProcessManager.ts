@@ -1,10 +1,14 @@
-import { ipcMain, IpcMainInvokeEvent, app } from 'electron'
+import { ipcMain, IpcMainInvokeEvent, app, dialog } from 'electron'
 import { join } from 'path'
 import { unlinkSync } from 'fs'
 import * as crypto from 'crypto'
 import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
+import { ImportManager } from './services/ImportManager'
+import { ExportManager } from './services/ExportManager'
+import { ChromeCsvImporter } from './services/importers/ChromeCsvImporter'
+import { DecryptedPasswordEntry } from '../common/types/database'
 
 /**
  * 数据库和安全服务的主进程管理器
@@ -13,12 +17,28 @@ import { CryptoService } from './services/CryptoService'
 export class MainProcessManager {
   private dbService: DatabaseService
   private initializer: DatabaseInitializer
+  private importManager: ImportManager
+  private exportManager: ExportManager
   private isAuthenticated = false
 
   constructor() {
     this.dbService = new DatabaseService()
     this.initializer = new DatabaseInitializer(this.dbService)
+    this.importManager = new ImportManager()
+    this.exportManager = new ExportManager()
     this.setupIpcHandlers()
+    this.initializeImportExportServices()
+  }
+
+  /**
+   * 初始化导入导出服务
+   */
+  private initializeImportExportServices(): void {
+    // 注册Chrome CSV导入器
+    const chromeCsvImporter = new ChromeCsvImporter()
+    this.importManager.registerImporter(chromeCsvImporter)
+
+    console.log('导入导出服务初始化完成')
   }
 
   /**
@@ -411,6 +431,122 @@ export class MainProcessManager {
         return { success: true }
       })
     )
+
+    // 导入导出处理器
+    ipcMain.handle(
+      'import:preview',
+      protectedHandler(async (_: any, config: any) => {
+        try {
+          return await this.importManager.preview(config)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '导入预览失败'
+          return { success: false, message, error: message }
+        }
+      })
+    )
+
+    ipcMain.handle(
+      'import:execute',
+      protectedHandler(async (_: any, config: any) => {
+        try {
+          // 执行导入预览以获取数据
+          const previewResult = await this.importManager.preview(config)
+          if (!previewResult.success || !previewResult.data) {
+            return previewResult
+          }
+
+          // 实际保存密码到数据库
+          const { entries } = previewResult.data
+          const importedEntries: DecryptedPasswordEntry[] = []
+
+          for (const entry of entries) {
+            try {
+              // 转换为CreatePasswordEntryInput格式
+              const passwordInput = {
+                title: entry.title || '未命名',
+                username: entry.username || '',
+                password: entry.password || '',
+                url: entry.url || '',
+                description: entry.description || '',
+                tags: entry.tags?.map((tag) => tag.name) || [],
+                is_favorite: entry.is_favorite || false
+              }
+
+              // 保存到数据库
+              const savedEntry = await this.dbService.createPasswordEntry(passwordInput)
+              importedEntries.push(savedEntry)
+            } catch (saveError) {
+              console.error('保存密码条目失败:', saveError)
+              // 继续处理其他条目
+            }
+          }
+
+          return {
+            success: true,
+            message: `成功导入${importedEntries.length}条密码记录`,
+            data: {
+              ...previewResult.data,
+              entries: importedEntries
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '导入执行失败'
+          return { success: false, message, error: message }
+        }
+      })
+    )
+
+    ipcMain.handle('import:get-supported-formats', async () => {
+      try {
+        const stats = this.importManager.getStatistics()
+        return {
+          success: true,
+          data: {
+            formats: stats.importerList.flatMap((importer) => importer.formats),
+            importers: stats.importerList
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '获取支持格式失败'
+        return { success: false, message, error: message }
+      }
+    })
+
+    // 文件选择对话框
+    ipcMain.handle('dialog:select-import-file', async (_: any, format: string) => {
+      try {
+        // 根据导入格式设置文件过滤器
+        const filters: Array<{ name: string; extensions: string[] }> = []
+
+        if (format === 'chrome') {
+          filters.push({ name: 'CSV文件', extensions: ['csv'] })
+        } else {
+          filters.push({ name: '所有文件', extensions: ['*'] })
+        }
+
+        filters.push({ name: '所有文件', extensions: ['*'] })
+
+        const result = await dialog.showOpenDialog({
+          title: '选择要导入的文件',
+          filters: filters,
+          properties: ['openFile']
+        })
+
+        if (result.canceled || !result.filePaths.length) {
+          return { success: false, message: '用户取消选择文件' }
+        }
+
+        return {
+          success: true,
+          data: {
+            filePath: result.filePaths[0]
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '文件选择失败'
+        return { success: false, message, error: message }
+      }
+    })
 
     // 临时：测试 CryptoService 的写回验证流程（encrypt -> decrypt -> compare）
     // 可从渲染进程调用： window.electron.ipcRenderer.invoke('test:crypto')

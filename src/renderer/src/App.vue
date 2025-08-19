@@ -553,9 +553,84 @@ const handleDeleteEntry = async (id: number): Promise<void> => {
 }
 
 // MenuBar 事件处理函数
-const handleImport = (format: string): void => {
+const handleImport = async (format: string): Promise<void> => {
   console.log('导入请求:', format)
-  // TODO: 实现导入功能
+
+  if (format === 'chrome') {
+    await handleChromeImport()
+  } else {
+    console.log(`暂不支持 ${format} 格式导入`)
+    // TODO: 实现其他格式的导入功能
+  }
+}
+
+// 处理Chrome CSV导入
+const handleChromeImport = async (): Promise<void> => {
+  try {
+    console.log('开始Chrome CSV导入流程...')
+
+    // 使用文件选择对话框让用户选择CSV文件
+    //@ts-expect-error window.api injected by preload
+    const fileResult = await window.api.selectImportFile('chrome')
+
+    if (!fileResult.success || !fileResult.data?.filePath) {
+      console.log('用户取消了文件选择或选择失败:', fileResult.message)
+      return
+    }
+
+    const selectedFilePath = fileResult.data.filePath
+    console.log('用户选择的文件:', selectedFilePath)
+
+    // 构建导入配置
+    const importConfig = {
+      format: 'chrome',
+      filePath: selectedFilePath,
+      conflictStrategy: 'skip',
+      createBackup: true
+    }
+
+    // 先预览导入数据
+    console.log('开始预览导入数据...')
+    //@ts-expect-error window.api injected by preload
+    const previewResult = await window.api.importPreview(importConfig)
+
+    if (!previewResult.success) {
+      console.error('预览导入失败:', previewResult.message)
+      alert(`预览失败: ${previewResult.message}`)
+      return
+    }
+
+    console.log('预览结果:', previewResult.data)
+
+    // 显示预览信息让用户确认
+    const confirmImport = confirm(
+      `将导入 ${previewResult.data?.statistics.totalEntries} 个密码条目，` +
+        `其中 ${previewResult.data?.statistics.invalidEntries} 个无效条目。是否继续？`
+    )
+
+    if (!confirmImport) {
+      console.log('用户取消了导入')
+      return
+    }
+
+    // 执行导入
+    console.log('开始执行导入...')
+    //@ts-expect-error window.api injected by preload
+    const importResult = await window.api.importExecute(importConfig)
+
+    if (importResult.success) {
+      console.log('导入成功:', importResult.data)
+      // 重新加载密码列表
+      await loadPasswords()
+      alert('导入成功！')
+    } else {
+      console.error('导入失败:', importResult.message)
+      alert(`导入失败: ${importResult.message}`)
+    }
+  } catch (error) {
+    console.error('Chrome导入过程中发生错误:', error)
+    alert('导入过程中发生错误，请查看控制台了解详情')
+  }
 }
 
 const handleExport = (format: string): void => {

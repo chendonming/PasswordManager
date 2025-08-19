@@ -13,6 +13,7 @@ import type {
   CreateAuditLogInput,
   AuditLog
 } from '../common/types/database'
+import type { ImportConfig } from '../common/types/import-export'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
@@ -57,7 +58,13 @@ const allowedInvokes = new Set([
   'window:maximize',
   'window:close',
   // theme
-  'theme:set-background'
+  'theme:set-background',
+  // import/export
+  'import:preview',
+  'import:execute',
+  'import:get-supported-formats',
+  // dialog
+  'dialog:select-import-file'
 ])
 
 type Listener = (...args: unknown[]) => void
@@ -206,7 +213,13 @@ const api = {
   closeWindow: async () => await api.invoke('window:close'),
 
   // theme controls
-  setThemeBackground: async (isDark: boolean) => await api.invoke('theme:set-background', isDark)
+  setThemeBackground: async (isDark: boolean) => await api.invoke('theme:set-background', isDark),
+
+  // import/export controls
+  importPreview: async (config: ImportConfig) => await api.invoke('import:preview', config),
+  importExecute: async (config: ImportConfig) => await api.invoke('import:execute', config),
+  getSupportedImportFormats: async () => await api.invoke('import:get-supported-formats'),
+  selectImportFile: async (format: string) => await api.invoke('dialog:select-import-file', format)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

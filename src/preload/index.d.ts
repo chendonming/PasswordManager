@@ -3,6 +3,12 @@ import type {
   DecryptedPasswordEntry,
   DecryptedPasswordHistory
 } from '../common/types/database'
+import type {
+  ImportConfig,
+  ImportPreviewData,
+  ImportFormat,
+  OperationResult
+} from '../common/types/import-export'
 
 declare global {
   interface Window {
@@ -76,6 +82,22 @@ interface IPCInvokeMap {
 
   // theme controls
   'theme:set-background': (isDark: boolean) => void
+
+  // import/export controls
+  'import:preview': (config: ImportConfig) => Promise<OperationResult<ImportPreviewData>>
+  'import:execute': (config: ImportConfig) => Promise<OperationResult<ImportPreviewData>>
+  'import:get-supported-formats': () => Promise<{
+    success: boolean
+    data?: { formats: ImportFormat[]; importers: unknown[] }
+    message?: string
+  }>
+
+  // dialog controls
+  'dialog:select-import-file': (format: string) => Promise<{
+    success: boolean
+    data?: { filePath: string }
+    message?: string
+  }>
 }
 
 // password-related types are provided by `src/common/types/database.d.ts` as global declarations
@@ -148,6 +170,20 @@ interface PreloadAPI {
 
   // theme controls
   setThemeBackground(isDark: boolean): Promise<void>
+
+  // import/export controls
+  importPreview(config: ImportConfig): Promise<OperationResult<ImportPreviewData>>
+  importExecute(config: ImportConfig): Promise<OperationResult<ImportPreviewData>>
+  getSupportedImportFormats(): Promise<{
+    success: boolean
+    data?: { formats: ImportFormat[]; importers: unknown[] }
+    message?: string
+  }>
+  selectImportFile(format: string): Promise<{
+    success: boolean
+    data?: { filePath: string }
+    message?: string
+  }>
 }
 
 export {}
