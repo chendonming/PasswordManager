@@ -1,5 +1,7 @@
 <template>
-  <div class="titlebar flex items-center justify-between px-4 drag-region">
+  <div
+    class="h-12 border-b flex items-center justify-between px-4 drag-region bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+  >
     <!-- 应用标题和图标 -->
     <div class="flex items-center space-x-3 no-drag">
       <div class="w-6 h-6 bg-primary-600 rounded-md flex items-center justify-center">
@@ -42,6 +44,34 @@
 
     <!-- 窗口控制按钮 -->
     <div class="flex items-center space-x-1 no-drag">
+      <!-- 主题切换按钮 -->
+      <button
+        class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+        title="切换主题"
+        @click="$emit('toggle-theme')"
+      >
+        <svg
+          class="w-4 h-4 text-gray-600 dark:text-gray-400 dark:hidden"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <!-- 月亮图标 (深色主题) -->
+          <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+        </svg>
+        <svg
+          class="w-4 h-4 text-gray-600 dark:text-gray-400 hidden dark:block"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <!-- 太阳图标 (浅色主题) -->
+          <path
+            fill-rule="evenodd"
+            d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </button>
+
       <button
         class="w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors duration-200"
         title="最小化"
@@ -98,9 +128,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-// 定义 props 和 emits
+// 定义 emits
 defineEmits<{
   search: [query: string]
+  'toggle-theme': []
 }>()
 
 // 响应式数据
@@ -125,3 +156,13 @@ const closeWindow = (): void => {
   }
 }
 </script>
+
+<style>
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+</style>

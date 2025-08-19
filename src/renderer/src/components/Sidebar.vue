@@ -141,7 +141,6 @@ import { computed } from 'vue'
 // 定义 props
 interface Props {
   activeTab?: string
-  isDarkMode?: boolean
   userInfo?: {
     username?: string
     passwordCount?: number
@@ -156,7 +155,6 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   activeTab: 'all',
-  isDarkMode: false,
   userInfo: () => ({ username: '用户', passwordCount: 0 }),
   tags: () => []
 })
