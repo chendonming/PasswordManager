@@ -4,7 +4,9 @@
   >
     <!-- 应用标题和图标 -->
     <div class="flex items-center space-x-3 no-drag">
-      <div class="w-6 h-6 bg-primary-600 rounded-md flex items-center justify-center">
+      <div
+        class="w-6 h-6 bg-blue-600 dark:bg-blue-500 rounded-md flex items-center justify-center shadow-sm"
+      >
         <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
           <path
             fill-rule="evenodd"
