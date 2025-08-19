@@ -139,7 +139,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import PasswordStrengthIndicator from './PasswordStrengthIndicator.vue'
 
 interface PasswordForm {
@@ -152,11 +152,18 @@ interface PasswordForm {
 }
 
 interface Props {
-  initialData?: Partial<PasswordForm>
+  initialData?: {
+    title?: string
+    username?: string
+    password?: string
+    url?: string
+    description?: string
+    is_favorite?: boolean
+  } | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  initialData: () => ({})
+  initialData: null
 })
 
 const emit = defineEmits<{
@@ -165,14 +172,41 @@ const emit = defineEmits<{
 
 // 表单数据
 const form = ref<PasswordForm>({
-  title: '',
-  username: '',
-  password: '',
-  url: '',
-  description: '',
-  is_favorite: false,
-  ...props.initialData
+  title: props.initialData?.title || '',
+  username: props.initialData?.username || '',
+  password: props.initialData?.password || '',
+  url: props.initialData?.url || '',
+  description: props.initialData?.description || '',
+  is_favorite: props.initialData?.is_favorite || false
 })
+
+// 监听initialData变化以支持编辑模式
+watch(
+  () => props.initialData,
+  (newData) => {
+    if (newData) {
+      form.value = {
+        title: newData.title || '',
+        username: newData.username || '',
+        password: newData.password || '',
+        url: newData.url || '',
+        description: newData.description || '',
+        is_favorite: newData.is_favorite || false
+      }
+    } else {
+      // 重置表单
+      form.value = {
+        title: '',
+        username: '',
+        password: '',
+        url: '',
+        description: '',
+        is_favorite: false
+      }
+    }
+  },
+  { immediate: true }
+)
 
 // 显示密码状态
 const showPassword = ref(false)
@@ -230,6 +264,7 @@ const resetForm = (): void => {
 
 // 暴露方法给父组件
 defineExpose({
-  resetForm
+  resetForm,
+  submit: handleSubmit
 })
 </script>

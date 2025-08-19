@@ -26,12 +26,11 @@ type IPCResult<T> = T | { error: string }
 
 interface IPCInvokeMap {
   // auth
-  'auth:is-first-run': () => boolean
+  'auth:check-status': () => { status: string; message?: string }
+  'auth:create-master-password': (masterPassword: string) => { success: boolean; error?: string }
+  'auth:unlock': (masterPassword: string) => { success: boolean; error?: string }
   'auth:logout': () => { success: boolean }
   'auth:is-authenticated': () => boolean
-  'auth:create-user': (username: string, password: string) => { success: boolean }
-  'auth:login': (username: string, password: string) => { success: boolean }
-  'auth:status': () => { isAuthenticated: boolean; hasMasterPasswordHash: boolean }
 
   // passwords
   'passwords:create': (entry: CreatePasswordEntryInput) => IPCResult<DecryptedPasswordEntry>
@@ -132,10 +131,9 @@ interface PreloadAPI {
   getAuditLogs(limit?: number): Promise<AuditLog[]>
 
   // auth helpers
-  authIsFirstRun(): Promise<boolean>
-  authCreateUser(username: string, password: string): Promise<{ success: boolean }>
-  authLogin(username: string, password: string): Promise<{ success: boolean }>
-  authStatus(): Promise<{ isAuthenticated: boolean; hasMasterPasswordHash: boolean }>
+  authCheckStatus(): Promise<{ status: string; message?: string }>
+  authCreateMasterPassword(masterPassword: string): Promise<{ success: boolean; error?: string }>
+  authUnlock(masterPassword: string): Promise<{ success: boolean; error?: string }>
 
   // dev/test
   testCrypto(): Promise<{ success: boolean; path?: string; error?: string }>

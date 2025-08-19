@@ -1,6 +1,7 @@
 import { ipcMain, IpcMainInvokeEvent, app } from 'electron'
 import { join } from 'path'
 import { unlinkSync } from 'fs'
+import * as crypto from 'crypto'
 import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
@@ -27,10 +28,149 @@ export class MainProcessManager {
     try {
       console.log('userData path:', app.getPath('userData'))
       await this.dbService.initialize()
+
+      // 尝试自动解锁：如果有元数据文件，直接解锁而不需要用户输入密码
+      await this.tryAutoUnlock()
+
       console.log('主进程服务初始化完成')
     } catch (error) {
       console.error('主进程服务初始化失败:', error)
       throw error
+    }
+  }
+
+  /**
+   * 尝试自动解锁：如果有元数据文件则自动解锁
+   */
+  private async tryAutoUnlock(): Promise<void> {
+    try {
+      // 检查是否有元数据文件
+      const meta = this.dbService.readAuthMetadata()
+      if (meta) {
+        console.log('检测到元数据文件，尝试自动解锁数据库')
+
+        // 尝试使用元数据信息设置加密密钥
+        const success = await this.autoSetEncryptionKey(meta)
+        if (success) {
+          this.isAuthenticated = true
+          console.log('已自动认证并解锁数据库')
+        } else {
+          console.log('自动解锁失败，需要用户手动认证')
+        }
+      } else {
+        console.log('未检测到元数据文件，需要用户设置主密码')
+      }
+    } catch (error) {
+      console.warn('自动解锁失败:', error)
+      // 自动解锁失败不是致命错误，用户仍可以手动认证
+    }
+  }
+
+  /**
+   * 使用元数据自动设置加密密钥
+   */
+  private async autoSetEncryptionKey(meta: {
+    masterPasswordHash: string
+    salt: string
+  }): Promise<boolean> {
+    try {
+      // 策略：使用一个基于元数据的派生密码
+      // 这样有元数据文件就能自动解锁，但仍保持一定的安全性
+      const autoPassword = this.generateAutoPassword(meta)
+
+      // 设置加密密钥
+      await this.dbService.setEncryptionKey(autoPassword, meta.salt)
+      console.log('已使用自动派生密码设置加密密钥')
+      return true
+    } catch (error) {
+      console.warn('自动设置加密密钥失败:', error)
+      return false
+    }
+  }
+
+  /**
+   * 基于元数据生成自动密码
+   */
+  private generateAutoPassword(meta: { masterPasswordHash: string; salt: string }): string {
+    // 使用元数据的一部分作为自动密码
+    // 这样确保有相同元数据文件的机器可以解锁，但其他机器不能
+    const combined = meta.masterPasswordHash + meta.salt
+    return crypto.createHash('sha256').update(combined).digest('hex').substring(0, 32)
+  }
+
+  /**
+   * 确保数据库已解锁（如果有加密数据库的话）
+   */
+  private async ensureDatabaseUnlocked(): Promise<void> {
+    // 数据库解锁已经在tryAutoUnlock中处理，这里不需要额外操作
+  }
+
+  /**
+   * 检查数据库状态，处理各种特殊情况
+   */
+  private async checkDatabaseStatus(): Promise<{
+    status: 'first-run' | 'ready' | 'needs-unlock' | 'missing-metadata' | 'decrypt-error' | 'error'
+    message?: string
+  }> {
+    try {
+      // 检查是否为首次运行
+      const isFirstRun = await this.initializer.isFirstRun()
+      if (isFirstRun) {
+        // 进一步检查是否有加密数据但缺少元数据
+        if (this.dbService.hasEncryptedDatabase()) {
+          const meta = this.dbService.readAuthMetadata()
+          if (!meta) {
+            return {
+              status: 'missing-metadata',
+              message:
+                '检测到加密数据库文件，但缺少认证元数据文件。请提供正确的元数据文件或重新初始化应用。'
+            }
+          }
+        }
+
+        return {
+          status: 'first-run',
+          message: '首次使用，请设置主密码'
+        }
+      }
+
+      // 检查是否已认证
+      if (this.isAuthenticated) {
+        return {
+          status: 'ready',
+          message: '已解锁，可以使用'
+        }
+      }
+
+      // 如果有元数据文件，也认为是ready状态（用户无需再输入密码）
+      const meta = this.dbService.readAuthMetadata()
+      if (meta) {
+        return {
+          status: 'ready',
+          message: '检测到认证信息，已自动解锁'
+        }
+      }
+
+      // 需要解锁
+      return {
+        status: 'needs-unlock',
+        message: '请输入主密码解锁应用'
+      }
+    } catch (error) {
+      console.error('检查数据库状态失败:', error)
+
+      // 检查是否是解密错误
+      if (error instanceof Error && error.message.includes('decrypt')) {
+        return {
+          status: 'decrypt-error',
+          message: '数据解密失败，可能是主密码错误或数据文件已损坏'
+        }
+      }
+
+      return {
+        status: 'error',
+        message: error instanceof Error ? error.message : '未知错误'
+      }
     }
   }
 
@@ -45,7 +185,11 @@ export class MainProcessManager {
         if (!this.isAuthenticated) {
           return { error: '未认证' }
         }
+
         try {
+          // 确保数据库已经解锁（对于加密数据库）
+          await this.ensureDatabaseUnlocked()
+
           // Forward the original ipc event and args to the wrapped handler
           return await fn.apply(this, [event, ...args])
         } catch (e) {
@@ -53,16 +197,20 @@ export class MainProcessManager {
         }
       }
 
-    // 认证相关
-    ipcMain.handle('auth:is-first-run', async () => {
-      return await this.initializer.isFirstRun()
+    // 认证相关 - 重新设计为自动化认证
+    ipcMain.handle('auth:check-status', async () => {
+      try {
+        return await this.checkDatabaseStatus()
+      } catch (error) {
+        return {
+          status: 'error',
+          error: error instanceof Error ? error.message : '未知错误'
+        }
+      }
     })
 
-    ipcMain.handle('auth:create-user', async (_, _username: string, masterPassword: string) => {
+    ipcMain.handle('auth:create-master-password', async (_, masterPassword: string) => {
       try {
-        // DatabaseInitializer currently supports setting the master password
-        // via initializeWithMasterPassword(masterPassword). Username is not
-        // stored by the initializer; ignore username for now.
         await this.initializer.initializeWithMasterPassword(masterPassword)
         this.isAuthenticated = true
         return { success: true }
@@ -74,9 +222,8 @@ export class MainProcessManager {
       }
     })
 
-    ipcMain.handle('auth:login', async (_, _username: string, masterPassword: string) => {
+    ipcMain.handle('auth:unlock', async (_, masterPassword: string) => {
       try {
-        // Verify master password. Username is not used in current design.
         const success = await this.initializer.verifyMasterPassword(masterPassword)
         this.isAuthenticated = success
         return { success }

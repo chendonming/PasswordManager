@@ -8,64 +8,234 @@
       <!-- 侧边栏组件 -->
       <Sidebar
         :active-tab="activeTab"
-        :user-info="{ username: '用户', passwordCount: mockPasswords.length }"
+        :user-info="{ username: '用户', passwordCount: passwords.length }"
         @navigate="handleNavigate"
         @sync="handleSync"
         @settings="handleSettings"
       />
 
       <!-- 主内容区 -->
-      <div class="flex-1 bg-white dark:bg-gray-900">
-        <!-- 全部密码视图 -->
-        <PasswordList
-          v-if="activeTab === 'all'"
-          title="全部密码"
-          :entries="mockPasswords"
-          :search-query="searchQuery"
-          :selected-entry-id="selectedEntryId"
-          @add-password="handleAddPassword"
-          @select-entry="handleSelectEntry"
-          @edit-entry="handleEditEntry"
-          @delete-entry="handleDeleteEntry"
-        />
+      <div class="flex-1 bg-white dark:bg-gray-900 relative">
+        <!-- 全局加载状态 -->
+        <div
+          v-if="isLoading"
+          class="absolute inset-0 bg-white dark:bg-gray-900 bg-opacity-75 dark:bg-opacity-75 flex items-center justify-center z-10"
+        >
+          <div class="flex flex-col items-center space-y-4">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p class="text-gray-600 dark:text-gray-400">加载中...</p>
+          </div>
+        </div>
 
-        <!-- 收藏夹视图 -->
-        <PasswordList
-          v-else-if="activeTab === 'favorites'"
-          title="收藏夹"
-          :entries="favoritePasswords"
-          :search-query="searchQuery"
-          :selected-entry-id="selectedEntryId"
-          @add-password="handleAddPassword"
-          @select-entry="handleSelectEntry"
-          @edit-entry="handleEditEntry"
-          @delete-entry="handleDeleteEntry"
-        />
+        <!-- 未认证状态：显示主密码输入界面 -->
+        <div
+          v-if="!isAuthenticated && !isLoading"
+          class="flex items-center justify-center h-full bg-gray-50 dark:bg-gray-800"
+        >
+          <div class="w-full max-w-md px-6">
+            <div class="text-center mb-8">
+              <svg
+                class="w-16 h-16 mx-auto mb-4 text-blue-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1721 9z"
+                />
+              </svg>
+              <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">密码管理器</h3>
+              <p class="text-gray-600 dark:text-gray-400 mb-4">
+                {{ isFirstTime ? '设置主密码以开始使用' : '输入主密码以解锁您的数据' }}
+              </p>
+            </div>
 
-        <!-- 最近使用视图 -->
-        <PasswordList
-          v-else-if="activeTab === 'recent'"
-          title="最近使用"
-          :entries="recentPasswords"
-          :search-query="searchQuery"
-          :selected-entry-id="selectedEntryId"
-          @add-password="handleAddPassword"
-          @select-entry="handleSelectEntry"
-          @edit-entry="handleEditEntry"
-          @delete-entry="handleDeleteEntry"
-        />
+            <form class="space-y-4" @submit.prevent="handleMasterPasswordSubmit">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {{ isFirstTime ? '设置主密码' : '主密码' }}
+                </label>
+                <div class="relative">
+                  <input
+                    v-model="masterPassword"
+                    :type="showMasterPassword ? 'text' : 'password'"
+                    required
+                    :placeholder="isFirstTime ? '请设置您的主密码' : '请输入主密码'"
+                    class="w-full px-3 py-3 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    class="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    @click="showMasterPassword = !showMasterPassword"
+                  >
+                    <svg
+                      class="h-5 w-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        v-if="!showMasterPassword"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                      <path
+                        v-if="!showMasterPassword"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                      />
+                      <path
+                        v-if="showMasterPassword"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </div>
 
-        <!-- 密码生成器视图 -->
-        <PasswordGenerator v-else-if="activeTab === 'generator'" />
+              <div v-if="isFirstTime" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    确认主密码
+                  </label>
+                  <input
+                    v-model="confirmMasterPassword"
+                    :type="showMasterPassword ? 'text' : 'password'"
+                    required
+                    placeholder="请再次输入主密码"
+                    class="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-400">
+                  <p class="mb-1">⚠️ 请妥善保管您的主密码：</p>
+                  <ul class="list-disc list-inside space-y-1 text-xs">
+                    <li>主密码用于加密您的所有数据</li>
+                    <li>忘记主密码将无法恢复您的数据</li>
+                    <li>建议使用强密码并记住它</li>
+                  </ul>
+                </div>
+              </div>
 
-        <!-- 默认/欢迎视图 -->
-        <WelcomeView v-else @navigate="handleNavigate" />
+              <div v-if="authError" class="text-red-600 text-sm">
+                {{ authError }}
+              </div>
+
+              <button
+                type="submit"
+                :disabled="isAuthenticating"
+                class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 flex items-center justify-center"
+              >
+                <div
+                  v-if="isAuthenticating"
+                  class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"
+                ></div>
+                {{ isAuthenticating ? '处理中...' : isFirstTime ? '创建并解锁' : '解锁' }}
+              </button>
+            </form>
+          </div>
+        </div>
+        <!-- 全局错误状态 -->
+        <div
+          v-if="error && !isLoading && isAuthenticated"
+          class="absolute inset-0 bg-white dark:bg-gray-900 flex items-center justify-center z-10"
+        >
+          <div class="text-center max-w-md px-6">
+            <svg
+              class="w-16 h-16 mx-auto mb-4 text-red-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+            <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">出现错误</h3>
+            <p class="text-gray-600 dark:text-gray-400 mb-4">{{ error }}</p>
+            <button
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
+              @click="loadPasswords"
+            >
+              重试
+            </button>
+          </div>
+        </div>
+
+        <!-- 已认证状态：显示主要内容 -->
+        <template v-if="isAuthenticated && !error">
+          <!-- 全部密码视图 -->
+          <PasswordList
+            v-if="activeTab === 'all'"
+            title="全部密码"
+            :entries="passwords"
+            :search-query="searchQuery"
+            :selected-entry-id="selectedEntryId"
+            @add-password="handleAddPassword"
+            @select-entry="handleSelectEntry"
+            @edit-entry="handleEditEntry"
+            @delete-entry="handleDeleteEntry"
+          />
+
+          <!-- 收藏夹视图 -->
+          <PasswordList
+            v-else-if="activeTab === 'favorites'"
+            title="收藏夹"
+            :entries="favoritePasswords"
+            :search-query="searchQuery"
+            :selected-entry-id="selectedEntryId"
+            @add-password="handleAddPassword"
+            @select-entry="handleSelectEntry"
+            @edit-entry="handleEditEntry"
+            @delete-entry="handleDeleteEntry"
+          />
+
+          <!-- 最近使用视图 -->
+          <PasswordList
+            v-else-if="activeTab === 'recent'"
+            title="最近使用"
+            :entries="recentPasswords"
+            :search-query="searchQuery"
+            :selected-entry-id="selectedEntryId"
+            @add-password="handleAddPassword"
+            @select-entry="handleSelectEntry"
+            @edit-entry="handleEditEntry"
+            @delete-entry="handleDeleteEntry"
+          />
+
+          <!-- 密码生成器视图 -->
+          <PasswordGenerator v-else-if="activeTab === 'generator'" />
+
+          <!-- 默认/欢迎视图 -->
+          <WelcomeView v-else @navigate="handleNavigate" />
+        </template>
       </div>
     </div>
 
     <!-- 添加密码弹窗 -->
-    <Modal :visible="showPasswordModal" title="添加密码" size="lg" @close="closePasswordModal">
-      <PasswordForm ref="passwordFormRef" @submit="handlePasswordSubmit" />
+    <Modal
+      :visible="showPasswordModal"
+      :title="isEditMode ? '编辑密码' : '添加密码'"
+      size="lg"
+      @close="closePasswordModal"
+    >
+      <PasswordForm
+        ref="passwordFormRef"
+        :initial-data="editingEntry"
+        @submit="handlePasswordSubmit"
+      />
 
       <template #footer>
         <button
@@ -80,7 +250,7 @@
           class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors duration-200"
           @click="submitPasswordForm"
         >
-          保存
+          {{ isEditMode ? '更新' : '保存' }}
         </button>
       </template>
     </Modal>
@@ -88,14 +258,51 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import Sidebar from './components/Sidebar.vue'
+import { ref, computed, onMounted } from 'vue'
 import TitleBar from './components/TitleBar.vue'
+import Sidebar from './components/Sidebar.vue'
 import PasswordList from './components/PasswordList.vue'
-import PasswordGenerator from './components/PasswordGenerator.vue'
-import WelcomeView from './components/WelcomeView.vue'
-import Modal from './components/Modal.vue'
 import PasswordForm from './components/PasswordForm.vue'
+import Modal from './components/Modal.vue'
+
+// API类型声明
+declare global {
+  interface Window {
+    api: {
+      invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+      searchPasswordEntries: (params: {
+        page?: number
+        pageSize?: number
+        query?: string
+      }) => Promise<{
+        entries: DecryptedPasswordEntry[]
+        total: number
+        page: number
+        pageSize: number
+      }>
+      createPasswordEntry: (data: {
+        title: string
+        username?: string
+        password: string
+        url?: string
+        description?: string
+        is_favorite?: boolean
+      }) => Promise<DecryptedPasswordEntry>
+      updatePasswordEntry: (
+        id: number,
+        data: {
+          title?: string
+          username?: string
+          password?: string
+          url?: string
+          description?: string
+          is_favorite?: boolean
+        }
+      ) => Promise<DecryptedPasswordEntry>
+      deletePasswordEntry: (id: number) => Promise<void>
+    }
+  }
+}
 
 // 定义密码条目类型
 interface Tag {
@@ -161,8 +368,8 @@ const updateThemeClass = (): void => {
   console.log('当前 html 类列表:', html.classList.toString())
 }
 
-// 组件挂载时读取保存的主题设置
-onMounted(() => {
+// 组件挂载时读取保存的主题设置并检查认证状态
+onMounted(async () => {
   const savedTheme = localStorage.getItem('theme')
   if (savedTheme === 'dark') {
     isDarkMode.value = true
@@ -173,67 +380,167 @@ onMounted(() => {
     isDarkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches
   }
   updateThemeClass()
+
+  // 检查认证状态（包含首次运行检查）
+  await checkAuthStatus()
+
+  // 如果已认证，加载密码数据
+  if (isAuthenticated.value) {
+    await loadPasswords()
+  }
 })
 
-// 模拟数据
-const mockPasswords = ref<DecryptedPasswordEntry[]>([
-  {
-    id: 1,
-    title: 'GitHub',
-    username: 'user@example.com',
-    password: 'password123',
-    url: 'https://github.com',
-    is_favorite: false,
-    password_strength: 75,
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z',
-    tags: []
-  },
-  {
-    id: 2,
-    title: '网易邮箱',
-    username: 'example@163.com',
-    password: 'password456',
-    url: 'https://mail.163.com',
-    is_favorite: true,
-    password_strength: 60,
-    created_at: '2024-01-02T00:00:00Z',
-    updated_at: '2024-01-02T00:00:00Z',
-    last_used_at: '2024-01-15T00:00:00Z',
-    tags: []
-  },
-  {
-    id: 3,
-    title: 'Google',
-    username: 'myemail@gmail.com',
-    password: 'password789',
-    url: 'https://google.com',
-    is_favorite: false,
-    password_strength: 90,
-    created_at: '2024-01-03T00:00:00Z',
-    updated_at: '2024-01-03T00:00:00Z',
-    tags: []
-  },
-  {
-    id: 4,
-    title: '微信公众平台',
-    username: 'admin@company.com',
-    password: 'password000',
-    url: 'https://mp.weixin.qq.com',
-    is_favorite: true,
-    password_strength: 50,
-    created_at: '2024-01-04T00:00:00Z',
-    updated_at: '2024-01-04T00:00:00Z',
-    last_used_at: '2024-01-10T00:00:00Z',
-    tags: []
+// 密码数据
+const passwords = ref<DecryptedPasswordEntry[]>([])
+const isLoading = ref(false)
+const error = ref<string | null>(null)
+const isAuthenticated = ref(false)
+
+// 主密码认证相关
+const isFirstTime = ref(false)
+const masterPassword = ref('')
+const confirmMasterPassword = ref('')
+const showMasterPassword = ref(false)
+const isAuthenticating = ref(false)
+const authError = ref<string | null>(null)
+
+// 认证状态和消息
+const authStatus = ref<string>('checking') // checking, first-run, needs-unlock, ready, missing-metadata, decrypt-error, error
+const authMessage = ref<string>('')
+
+// 认证检查
+const checkAuthStatus = async (): Promise<void> => {
+  try {
+    const result = (await window.api.invoke('auth:check-status')) as {
+      status: string
+      message?: string
+    }
+
+    authStatus.value = result.status
+    authMessage.value = result.message || ''
+
+    // 根据状态设置认证标志
+    isAuthenticated.value = result.status === 'ready'
+    isFirstTime.value = result.status === 'first-run'
+
+    console.log('认证状态:', result)
+  } catch (err) {
+    console.error('检查认证状态失败:', err)
+    authStatus.value = 'error'
+    authMessage.value = err instanceof Error ? err.message : '检查状态失败'
+    isAuthenticated.value = false
   }
-])
+}
+
+// 检查数据库状态（已集成到checkAuthStatus中）
+
+// 主密码提交处理
+const handleMasterPasswordSubmit = async (): Promise<void> => {
+  if (isAuthenticating.value) return
+
+  authError.value = null
+
+  // 验证输入
+  if (!masterPassword.value.trim()) {
+    authError.value = '请输入主密码'
+    return
+  }
+
+  if (isFirstTime.value) {
+    if (!confirmMasterPassword.value.trim()) {
+      authError.value = '请确认主密码'
+      return
+    }
+
+    if (masterPassword.value !== confirmMasterPassword.value) {
+      authError.value = '两次输入的主密码不一致'
+      return
+    }
+
+    if (masterPassword.value.length < 6) {
+      authError.value = '主密码长度至少为6位'
+      return
+    }
+  }
+
+  try {
+    isAuthenticating.value = true
+
+    if (isFirstTime.value) {
+      // 首次运行，创建主密码
+      const result = (await window.api.invoke(
+        'auth:create-master-password',
+        masterPassword.value
+      )) as {
+        success: boolean
+        error?: string
+      }
+
+      if (!result.success) {
+        authError.value = result.error || '设置主密码失败'
+        return
+      }
+
+      console.log('主密码设置成功')
+    } else {
+      // 验证主密码
+      const result = (await window.api.invoke('auth:unlock', masterPassword.value)) as {
+        success: boolean
+        error?: string
+      }
+
+      if (!result.success) {
+        authError.value = result.error || '主密码错误'
+        return
+      }
+
+      console.log('主密码验证成功')
+    }
+
+    // 重新检查认证状态
+    await checkAuthStatus()
+
+    // 如果认证成功，清理密码字段并加载数据
+    if (isAuthenticated.value) {
+      masterPassword.value = ''
+      confirmMasterPassword.value = ''
+      await loadPasswords()
+    }
+  } catch (err) {
+    console.error('主密码处理失败:', err)
+    authError.value = err instanceof Error ? err.message : '认证失败'
+  } finally {
+    isAuthenticating.value = false
+  }
+}
+
+// 数据加载方法
+const loadPasswords = async (): Promise<void> => {
+  try {
+    isLoading.value = true
+    error.value = null
+
+    // 使用搜索API获取所有密码
+    const result = await window.api.searchPasswordEntries({
+      page: 1,
+      pageSize: 1000 // 获取所有密码
+    })
+
+    passwords.value = result.entries
+    console.log('密码数据加载成功，共', result.entries.length, '条')
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '加载密码失败'
+    console.error('加载密码失败:', err)
+  } finally {
+    isLoading.value = false
+  }
+}
 
 // 计算属性
-const favoritePasswords = computed(() => mockPasswords.value.filter((p) => p.is_favorite))
+const favoritePasswords = computed(() => passwords.value.filter((p) => p.is_favorite))
 
 const recentPasswords = computed(() =>
-  mockPasswords.value
+  passwords.value
     .filter((p) => p.last_used_at)
     .sort((a, b) => new Date(b.last_used_at!).getTime() - new Date(a.last_used_at!).getTime())
 )
@@ -262,53 +569,60 @@ const handleAddPassword = (): void => {
 
 const closePasswordModal = (): void => {
   showPasswordModal.value = false
+  editingEntry.value = null // 清理编辑状态
 }
 
-const handlePasswordSubmit = (data: PasswordFormData): void => {
-  console.log('提交密码数据:', data)
-  // 这里处理密码保存逻辑
-  const newPassword: DecryptedPasswordEntry = {
-    id: mockPasswords.value.length + 1,
-    title: data.title,
-    username: data.username,
-    password: data.password,
-    url: data.url,
-    description: data.description,
-    is_favorite: data.is_favorite,
-    password_strength: calculatePasswordStrength(data.password),
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    tags: []
-  }
+const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
+  try {
+    console.log('提交密码数据:', data)
 
-  mockPasswords.value.push(newPassword)
-  closePasswordModal()
+    if (editingEntry.value) {
+      // 编辑模式：更新现有密码
+      const updatedPassword = await window.api.updatePasswordEntry(editingEntry.value.id, {
+        title: data.title,
+        username: data.username,
+        password: data.password,
+        url: data.url,
+        description: data.description,
+        is_favorite: data.is_favorite
+      })
+
+      // 在本地数组中更新
+      const index = passwords.value.findIndex((p) => p.id === editingEntry.value!.id)
+      if (index > -1) {
+        passwords.value[index] = updatedPassword
+      }
+
+      console.log('密码更新成功:', updatedPassword.title)
+    } else {
+      // 新增模式：创建新密码
+      const newPassword = await window.api.createPasswordEntry({
+        title: data.title,
+        username: data.username,
+        password: data.password,
+        url: data.url,
+        description: data.description,
+        is_favorite: data.is_favorite
+      })
+
+      // 添加到本地数组中
+      passwords.value.push(newPassword)
+      console.log('密码创建成功:', newPassword.title)
+    }
+
+    closePasswordModal()
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '保存密码失败'
+    console.error('保存密码失败:', err)
+    // 可以在这里显示错误提示
+  }
 }
 
 const submitPasswordForm = (): void => {
-  // 触发表单提交
+  // 直接调用组件的submit方法
   if (passwordFormRef.value) {
-    const formElement = passwordFormRef.value.$el?.querySelector('form')
-    if (formElement) {
-      formElement.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))
-    }
+    passwordFormRef.value.submit()
   }
-}
-
-const calculatePasswordStrength = (password: string): number => {
-  let score = 0
-
-  // 长度评分
-  if (password.length >= 8) score += 25
-  if (password.length >= 12) score += 25
-
-  // 复杂度评分
-  if (/[a-z]/.test(password)) score += 10
-  if (/[A-Z]/.test(password)) score += 10
-  if (/[0-9]/.test(password)) score += 10
-  if (/[^a-zA-Z0-9]/.test(password)) score += 20
-
-  return Math.min(score, 100)
 }
 
 const handleSelectEntry = (entry: DecryptedPasswordEntry): void => {
@@ -317,19 +631,33 @@ const handleSelectEntry = (entry: DecryptedPasswordEntry): void => {
   // 这里可以显示密码详情或进行其他操作
 }
 
+// 编辑模式相关状态
+const editingEntry = ref<DecryptedPasswordEntry | null>(null)
+const isEditMode = computed(() => editingEntry.value !== null)
+
 const handleEditEntry = (entry: DecryptedPasswordEntry): void => {
   console.log('编辑密码条目:', entry.title)
-  // TODO: 实现编辑功能，可以打开编辑弹窗并预填数据
+  editingEntry.value = entry
   showPasswordModal.value = true
 }
 
-const handleDeleteEntry = (id: number): void => {
-  console.log('删除密码条目:', id)
-  // 从模拟数据中删除条目
-  const index = mockPasswords.value.findIndex((p) => p.id === id)
-  if (index > -1) {
-    mockPasswords.value.splice(index, 1)
-    console.log('密码条目已删除')
+const handleDeleteEntry = async (id: number): Promise<void> => {
+  try {
+    console.log('删除密码条目:', id)
+
+    // 调用真实的API删除密码
+    await window.api.deletePasswordEntry(id)
+
+    // 从本地数组中删除条目
+    const index = passwords.value.findIndex((p) => p.id === id)
+    if (index > -1) {
+      passwords.value.splice(index, 1)
+      console.log('密码条目已删除')
+    }
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : '删除密码失败'
+    console.error('删除密码失败:', err)
+    // 可以在这里显示错误提示
   }
 }
 </script>

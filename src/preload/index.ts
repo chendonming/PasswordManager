@@ -19,12 +19,11 @@ import { electronAPI } from '@electron-toolkit/preload'
 // Expose a small, safe IPC surface: invoke, on, once, off, plus autosave helpers
 const allowedInvokes = new Set([
   // auth
-  'auth:is-first-run',
-  'auth:create-user',
-  'auth:login',
+  'auth:check-status',
+  'auth:create-master-password',
+  'auth:unlock',
   'auth:logout',
   'auth:is-authenticated',
-  'auth:status',
   // tags
   'tags:get-all',
   'tags:create',
@@ -156,12 +155,10 @@ const api = {
     (await api.invoke('passwords:get-history', id)) as DecryptedPasswordHistory[],
 
   // auth helpers
-  authIsFirstRun: async () => api.invoke('auth:is-first-run'),
-  authCreateUser: async (username: string, password: string) =>
-    api.invoke('auth:create-user', username, password),
-  authLogin: async (username: string, password: string) =>
-    api.invoke('auth:login', username, password),
-  authStatus: async () => api.invoke('auth:status'),
+  authCheckStatus: async () => api.invoke('auth:check-status'),
+  authCreateMasterPassword: async (masterPassword: string) =>
+    api.invoke('auth:create-master-password', masterPassword),
+  authUnlock: async (masterPassword: string) => api.invoke('auth:unlock', masterPassword),
 
   // dev/test
   testCrypto: async () => api.invoke('test:crypto'),

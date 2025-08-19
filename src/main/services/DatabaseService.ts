@@ -25,9 +25,10 @@ export class DatabaseService implements DatabaseServiceInterface {
   private encryptionKey: Buffer | null = null
   private isInitialized = false
   // Dirty state + auto-save
-  private isDirty: boolean = false
+  private isDirty = false
   private autoSaveTimer: NodeJS.Timeout | null = null
   private autoSaveDelayMs: number = 3000 // debounce interval (ms)
+  private disableAutoSave: boolean = true // 禁用自动保存，采用纯内存方案
   private isSaving: boolean = false
   // file-level encryption paths
   private plainDbPath: string | null = null
@@ -68,27 +69,36 @@ export class DatabaseService implements DatabaseServiceInterface {
         return
       }
 
-      // 否则，如果明文数据库存在且没有密钥（未加密场景），打开磁盘文件
-      const openPath = dbPath
-      this.db = new Database(openPath, {
-        verbose: console.log // 开发环境下启用SQL日志
-      })
+      // 如果明文数据库存在且没有密钥（未加密场景），打开磁盘文件
+      if (existsSync(this.plainDbPath) && !this.encryptionKey) {
+        const openPath = dbPath
+        this.db = new Database(openPath, {
+          verbose: console.log // 开发环境下启用SQL日志
+        })
 
-      // 启用外键约束
-      this.db.exec('PRAGMA foreign_keys = ON')
+        // 启用外键约束
+        this.db.exec('PRAGMA foreign_keys = ON')
 
-      // 启用WAL模式以提高并发性能
-      this.db.exec('PRAGMA journal_mode = WAL')
+        // 启用WAL模式以提高并发性能
+        this.db.exec('PRAGMA journal_mode = WAL')
 
-      // 设置同步模式
-      this.db.exec('PRAGMA synchronous = FULL')
+        // 设置同步模式
+        this.db.exec('PRAGMA synchronous = FULL')
 
-      // 执行数据库架构初始化
-      await this.initializeSchema()
+        // 执行数据库架构初始化
+        await this.initializeSchema()
 
-      this.isInitialized = true
+        this.isInitialized = true
+        console.log('数据库初始化成功:', dbPath)
+        return
+      }
 
-      console.log('数据库初始化成功:', dbPath)
+      // 如果既没有加密文件也没有明文文件，等待用户设置主密码
+      if (!existsSync(this.encryptedDbPath) && !existsSync(this.plainDbPath)) {
+        console.log('未检测到数据库文件，等待用户设置主密码')
+        this.isInitialized = false
+        return
+      }
     } catch (error) {
       console.error('数据库初始化失败:', error)
       throw new Error(`数据库初始化失败: ${error instanceof Error ? error.message : '未知错误'}`)
@@ -560,6 +570,11 @@ export class DatabaseService implements DatabaseServiceInterface {
   }
 
   private scheduleAutoSave(): void {
+    // 如果禁用了自动保存，直接返回
+    if (this.disableAutoSave) {
+      return
+    }
+
     if (this.autoSaveTimer) {
       clearTimeout(this.autoSaveTimer)
     }
@@ -576,6 +591,11 @@ export class DatabaseService implements DatabaseServiceInterface {
    * 如果数据是脏的则序列化并保存（encrypt -> write）
    */
   private async flushIfDirty(): Promise<void> {
+    // 如果禁用了自动保存，直接返回
+    if (this.disableAutoSave) {
+      return
+    }
+
     if (!this.isDirty) return
     if (!this.db) return
     if (!this.encryptedDbPath || !this.encryptionKey) return
