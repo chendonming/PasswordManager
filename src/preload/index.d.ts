@@ -73,6 +73,9 @@ interface IPCInvokeMap {
   'window:minimize': () => void
   'window:maximize': () => void
   'window:close': () => void
+
+  // theme controls
+  'theme:set-background': (isDark: boolean) => void
 }
 
 // password-related types are provided by `src/common/types/database.d.ts` as global declarations
@@ -142,6 +145,9 @@ interface PreloadAPI {
   minimizeWindow(): Promise<void>
   maximizeWindow(): Promise<void>
   closeWindow(): Promise<void>
+
+  // theme controls
+  setThemeBackground(isDark: boolean): Promise<void>
 }
 
 export {}

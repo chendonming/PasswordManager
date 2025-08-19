@@ -248,12 +248,21 @@ const authViewRef = ref<InstanceType<typeof AuthenticationView> | null>(null)
 const isDarkMode = ref(false)
 
 // 主题切换方法
-const toggleTheme = (): void => {
+const toggleTheme = async (): Promise<void> => {
   isDarkMode.value = !isDarkMode.value
   updateThemeClass()
   // 保存主题设置到 localStorage
   localStorage.setItem('theme', isDarkMode.value ? 'dark' : 'light')
-  console.log('主题切换到:', isDarkMode.value ? '深色' : '浅色')
+
+  // 通知主进程更新窗口背景色
+  try {
+    //@ts-expect-error window.api injected by preload
+    await window.api.setThemeBackground(isDarkMode.value)
+    console.log('主题切换到:', isDarkMode.value ? '深色' : '浅色', '，主进程背景已更新')
+  } catch (error) {
+    console.error('更新主进程背景色失败:', error)
+    console.log('主题切换到:', isDarkMode.value ? '深色' : '浅色')
+  }
 }
 
 // 应用主题类到 html 元素
@@ -281,6 +290,15 @@ onMounted(async () => {
     isDarkMode.value = window.matchMedia('(prefers-color-scheme: dark)').matches
   }
   updateThemeClass()
+
+  // 同步初始主题到主进程
+  try {
+    //@ts-expect-error window.api injected by preload
+    await window.api.setThemeBackground(isDarkMode.value)
+    console.log('初始主题已同步到主进程:', isDarkMode.value ? '深色' : '浅色')
+  } catch (error) {
+    console.error('同步初始主题到主进程失败:', error)
+  }
 
   // 检查认证状态（包含首次运行检查）
   await checkAuthStatus()

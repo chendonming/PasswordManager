@@ -6,6 +6,13 @@ import { MainProcessManager } from './MainProcessManager'
 
 // 全局服务管理器
 let mainProcessManager: MainProcessManager | null = null
+let mainWindow: BrowserWindow | null = null
+
+// 主题配置
+const THEME_COLORS = {
+  light: '#ffffff',
+  dark: '#1f2937' // gray-800
+}
 
 async function initializeServices(): Promise<void> {
   try {
@@ -25,7 +32,7 @@ async function initializeServices(): Promise<void> {
 
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -34,7 +41,7 @@ function createWindow(): void {
     frame: false, // 无边框窗口
     autoHideMenuBar: true,
     titleBarStyle: 'hidden', // 隐藏标题栏
-    backgroundColor: '#ffffff',
+    backgroundColor: THEME_COLORS.light, // 默认浅色主题
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -45,7 +52,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -105,6 +112,14 @@ app.whenReady().then(async () => {
     const focusedWindow = BrowserWindow.getFocusedWindow()
     if (focusedWindow) {
       focusedWindow.close()
+    }
+  })
+
+  // 主题变更处理器
+  ipcMain.handle('theme:set-background', (_, isDark: boolean) => {
+    const backgroundColor = isDark ? THEME_COLORS.dark : THEME_COLORS.light
+    if (mainWindow) {
+      mainWindow.setBackgroundColor(backgroundColor)
     }
   })
 

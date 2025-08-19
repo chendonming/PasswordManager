@@ -55,7 +55,9 @@ const allowedInvokes = new Set([
   // window controls
   'window:minimize',
   'window:maximize',
-  'window:close'
+  'window:close',
+  // theme
+  'theme:set-background'
 ])
 
 type Listener = (...args: unknown[]) => void
@@ -201,7 +203,10 @@ const api = {
   // window controls
   minimizeWindow: async () => await api.invoke('window:minimize'),
   maximizeWindow: async () => await api.invoke('window:maximize'),
-  closeWindow: async () => await api.invoke('window:close')
+  closeWindow: async () => await api.invoke('window:close'),
+
+  // theme controls
+  setThemeBackground: async (isDark: boolean) => await api.invoke('theme:set-background', isDark)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
