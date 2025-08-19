@@ -1,5 +1,28 @@
 @import 'tailwindcss';
 
+/* 主题变量定义 */
+:root {
+  --bg-primary: #f9fafb;
+  --bg-secondary: #ffffff;
+  --text-primary: #374151;
+  --text-secondary: #6b7280;
+  --border-primary: #e5e7eb;
+}
+
+.dark {
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --border-primary: #374151;
+}
+
+/* 测试深色主题的基本样式 */
+.dark body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
 /* 自定义基础样式 */
 * {
   box-sizing: border-box;
@@ -14,6 +37,17 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* 深色主题样式 */
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #111827;
+  color: #f9fafb;
 }
 
 /* 滚动条样式 */
@@ -35,6 +69,7 @@ body {
   background: #9ca3af;
 }
 
+/* 深色主题滚动条 */
 .dark ::-webkit-scrollbar-thumb {
   background: #4b5563;
 }

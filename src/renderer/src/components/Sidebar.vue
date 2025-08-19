@@ -1,7 +1,16 @@
 <template>
-  <div class="w-64 bg-gray-50 border-r border-gray-200 flex flex-col">
+  <div
+    :class="[
+      'w-64',
+      'border-r',
+      'flex',
+      'flex-col',
+      isDarkMode ? 'bg-gray-800' : 'bg-gray-50',
+      isDarkMode ? 'border-gray-700' : 'border-gray-200'
+    ]"
+  >
     <!-- 用户信息区域 -->
-    <div class="p-4 border-b border-gray-200">
+    <div :class="['p-4', 'border-b', isDarkMode ? 'border-gray-700' : 'border-gray-200']">
       <div class="flex items-center space-x-3">
         <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
           <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -13,10 +22,19 @@
           </svg>
         </div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-900 truncate">
+          <p
+            :class="[
+              'text-sm',
+              'font-medium',
+              'truncate',
+              isDarkMode ? 'text-gray-100' : 'text-gray-900'
+            ]"
+          >
             {{ userInfo.username || '用户' }}
           </p>
-          <p class="text-xs text-gray-500">{{ userInfo.passwordCount || 0 }} 个密码</p>
+          <p :class="['text-xs', isDarkMode ? 'text-gray-400' : 'text-gray-500']">
+            {{ userInfo.passwordCount || 0 }} 个密码
+          </p>
         </div>
       </div>
     </div>
@@ -28,8 +46,24 @@
           v-for="item in navigationItems"
           :key="item.id"
           :class="[
-            'w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200',
-            activeTab === item.id ? 'bg-blue-100 text-blue-700' : 'text-gray-700 hover:bg-gray-100'
+            'w-full',
+            'flex',
+            'items-center',
+            'space-x-3',
+            'px-3',
+            'py-2',
+            'text-sm',
+            'font-medium',
+            'rounded-lg',
+            'transition-colors',
+            'duration-200',
+            activeTab === item.id
+              ? isDarkMode
+                ? 'bg-blue-900/50 text-blue-300'
+                : 'bg-blue-100 text-blue-700'
+              : isDarkMode
+                ? 'text-gray-300 hover:bg-gray-700'
+                : 'text-gray-700 hover:bg-gray-100'
           ]"
           @click="$emit('navigate', item.id)"
         >
@@ -37,7 +71,15 @@
           <span>{{ item.label }}</span>
           <span
             v-if="item.count !== undefined"
-            class="ml-auto text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600"
+            :class="[
+              'ml-auto',
+              'text-xs',
+              'px-2',
+              'py-0.5',
+              'rounded-full',
+              isDarkMode ? 'bg-gray-700' : 'bg-gray-200',
+              isDarkMode ? 'text-gray-300' : 'text-gray-600'
+            ]"
           >
             {{ item.count }}
           </span>
@@ -79,10 +121,23 @@
     </nav>
 
     <!-- 底部操作区域 -->
-    <div class="p-4 border-t border-gray-200">
+    <div :class="['p-4', 'border-t', isDarkMode ? 'border-gray-700' : 'border-gray-200']">
       <div class="space-y-2">
         <button
-          class="w-full flex items-center space-x-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+          :class="[
+            'w-full',
+            'flex',
+            'items-center',
+            'space-x-3',
+            'px-3',
+            'py-2',
+            'text-sm',
+            'rounded-lg',
+            'transition-colors',
+            'duration-200',
+            isDarkMode ? 'text-gray-300' : 'text-gray-700',
+            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+          ]"
           @click="$emit('sync')"
         >
           <svg
@@ -102,7 +157,20 @@
         </button>
 
         <button
-          class="w-full flex items-center space-x-3 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+          :class="[
+            'w-full',
+            'flex',
+            'items-center',
+            'space-x-3',
+            'px-3',
+            'py-2',
+            'text-sm',
+            'rounded-lg',
+            'transition-colors',
+            'duration-200',
+            isDarkMode ? 'text-gray-300' : 'text-gray-700',
+            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
+          ]"
           @click="$emit('settings')"
         >
           <svg
@@ -131,6 +199,7 @@ import { computed } from 'vue'
 // 定义 props
 interface Props {
   activeTab?: string
+  isDarkMode?: boolean
   userInfo?: {
     username?: string
     passwordCount?: number
@@ -145,6 +214,7 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   activeTab: 'all',
+  isDarkMode: false,
   userInfo: () => ({ username: '用户', passwordCount: 0 }),
   tags: () => []
 })

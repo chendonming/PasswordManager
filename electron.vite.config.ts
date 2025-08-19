@@ -2,9 +2,6 @@ import { resolve } from 'path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 // @ts-ignore: type resolution for @vitejs/plugin-vue requires "moduleResolution" to be node16/nodenext; ignore here
 import vue from '@vitejs/plugin-vue'
-import AutoImport from 'unplugin-auto-import/vite'
-import Components from 'unplugin-vue-components/vite'
-import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import { copyFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname } from 'path'
 
@@ -45,19 +42,6 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [
-      vue(),
-      AutoImport({
-        imports: [
-          'vue',
-          {
-            'naive-ui': ['useDialog', 'useMessage', 'useNotification', 'useLoadingBar']
-          }
-        ]
-      }),
-      Components({
-        resolvers: [NaiveUiResolver()]
-      })
-    ]
+    plugins: [vue()]
   }
 })
