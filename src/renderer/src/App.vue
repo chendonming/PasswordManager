@@ -1,7 +1,14 @@
 <template>
   <div id="app" class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
     <!-- 自定义标题栏 -->
-    <TitleBar @search="handleSearch" @toggle-theme="toggleTheme" />
+    <TitleBar
+      @search="handleSearch"
+      @toggle-theme="toggleTheme"
+      @import="handleImport"
+      @export="handleExport"
+      @tool="handleTool"
+      @help="handleHelp"
+    />
 
     <!-- 主要内容区域 -->
     <div class="flex flex-1 overflow-hidden">
@@ -524,6 +531,38 @@ const handleDeleteEntry = async (id: number): Promise<void> => {
     error.value = err instanceof Error ? err.message : '删除密码失败'
     console.error('删除密码失败:', err)
     // 可以在这里显示错误提示
+  }
+}
+
+// MenuBar 事件处理函数
+const handleImport = (format: string): void => {
+  console.log('导入请求:', format)
+  // TODO: 实现导入功能
+}
+
+const handleExport = (format: string): void => {
+  console.log('导出请求:', format)
+  // TODO: 实现导出功能
+}
+
+const handleTool = (action: string): void => {
+  console.log('工具操作:', action)
+  if (action === 'generator') {
+    activeTab.value = 'generator'
+  } else if (action === 'security-check') {
+    console.log('执行安全检查')
+    // TODO: 实现安全检查功能
+  } else if (action === 'settings') {
+    console.log('打开设置')
+    // TODO: 实现设置功能
+  }
+}
+
+const handleHelp = (action: string): void => {
+  console.log('帮助操作:', action)
+  if (action === 'about') {
+    console.log('显示关于信息')
+    // TODO: 实现关于对话框
   }
 }
 </script>

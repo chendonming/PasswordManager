@@ -14,6 +14,14 @@
         </svg>
       </div>
       <span class="text-sm font-semibold text-gray-700 dark:text-gray-200"> 密码管理器 </span>
+
+      <!-- 菜单栏 -->
+      <MenuBar
+        @import="handleImport"
+        @export="handleExport"
+        @tool="handleTool"
+        @help="handleHelp"
+      />
     </div>
 
     <!-- 搜索框 -->
@@ -127,33 +135,55 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import MenuBar from './MenuBar.vue'
 
 // 定义 emits
-defineEmits<{
+const emit = defineEmits<{
   search: [query: string]
   'toggle-theme': []
+  import: [format: string]
+  export: [format: string]
+  tool: [action: string]
+  help: [action: string]
 }>()
 
 // 响应式数据
 const searchQuery = ref('')
 
+// MenuBar 事件处理
+const handleImport = (format: string): void => {
+  emit('import', format)
+}
+
+const handleExport = (format: string): void => {
+  emit('export', format)
+}
+
+const handleTool = (action: string): void => {
+  emit('tool', action)
+}
+
+const handleHelp = (action: string): void => {
+  emit('help', action)
+}
+
 // 窗口控制方法
 const minimizeWindow = (): void => {
-  if (window.api) {
-    window.api.minimizeWindow()
-  }
+  console.log('最小化窗口')
+  //@ts-expect-error window.api injected by preload
+  window.api.minimizeWindow()
 }
 
 const maximizeWindow = (): void => {
-  if (window.api) {
-    window.api.maximizeWindow()
-  }
+  console.log('最大化窗口')
+  //@ts-expect-error window.api injected by preload
+  window.api.maximizeWindow()
 }
 
 const closeWindow = (): void => {
-  if (window.api) {
-    window.api.closeWindow()
-  }
+  console.log('关闭窗口')
+  //@ts-expect-error window.api injected by preload
+  window.api.closeWindow()
 }
 </script>
 
