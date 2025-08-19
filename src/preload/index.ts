@@ -52,7 +52,11 @@ const allowedInvokes = new Set([
   'backup:create',
   'audit:get-logs',
   // dev/test
-  'test:crypto'
+  'test:crypto',
+  // window controls
+  'window:minimize',
+  'window:maximize',
+  'window:close'
 ])
 
 type Listener = (...args: unknown[]) => void
@@ -195,7 +199,12 @@ const api = {
   // audit
   logAction: async (input: CreateAuditLogInput) => await api.invoke('audit:log-action', input),
   getAuditLogs: async (opts?: { limit?: number }) =>
-    (await api.invoke('audit:get-logs', opts)) as AuditLog[]
+    (await api.invoke('audit:get-logs', opts)) as AuditLog[],
+
+  // window controls
+  minimizeWindow: async () => await api.invoke('window:minimize'),
+  maximizeWindow: async () => await api.invoke('window:maximize'),
+  closeWindow: async () => await api.invoke('window:close')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

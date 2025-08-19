@@ -8,20 +8,10 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    NAlert: typeof import('naive-ui')['NAlert']
-    NButton: typeof import('naive-ui')['NButton']
-    NCard: typeof import('naive-ui')['NCard']
-    NConfigProvider: typeof import('naive-ui')['NConfigProvider']
-    NDialogProvider: typeof import('naive-ui')['NDialogProvider']
-    NDivider: typeof import('naive-ui')['NDivider']
-    NGlobalStyle: typeof import('naive-ui')['NGlobalStyle']
-    NInput: typeof import('naive-ui')['NInput']
-    NLoadingBarProvider: typeof import('naive-ui')['NLoadingBarProvider']
-    NMessageProvider: typeof import('naive-ui')['NMessageProvider']
-    NNotificationProvider: typeof import('naive-ui')['NNotificationProvider']
-    NSpace: typeof import('naive-ui')['NSpace']
-    NTag: typeof import('naive-ui')['NTag']
-    ThemeProvider: typeof import('./src/components/ThemeProvider.vue')['default']
+    PasswordDetail: typeof import('./src/components/PasswordDetail.vue')['default']
+    PasswordList: typeof import('./src/components/PasswordList.vue')['default']
+    Sidebar: typeof import('./src/components/Sidebar.vue')['default']
+    TitleBar: typeof import('./src/components/TitleBar.vue')['default']
     Versions: typeof import('./src/components/Versions.vue')['default']
   }
 }

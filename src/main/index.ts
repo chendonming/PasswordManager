@@ -26,14 +26,21 @@ async function initializeServices(): Promise<void> {
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
     show: false,
+    frame: false, // 无边框窗口
     autoHideMenuBar: true,
+    titleBarStyle: 'hidden', // 隐藏标题栏
+    backgroundColor: '#ffffff',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      nodeIntegration: false,
+      contextIsolation: true
     }
   })
 
@@ -74,6 +81,32 @@ app.whenReady().then(async () => {
 
   // IPC test (保留原有的ping测试)
   ipcMain.on('ping', () => console.log('pong'))
+
+  // 窗口控制 IPC 处理器
+  ipcMain.handle('window:minimize', () => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    if (focusedWindow) {
+      focusedWindow.minimize()
+    }
+  })
+
+  ipcMain.handle('window:maximize', () => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    if (focusedWindow) {
+      if (focusedWindow.isMaximized()) {
+        focusedWindow.unmaximize()
+      } else {
+        focusedWindow.maximize()
+      }
+    }
+  })
+
+  ipcMain.handle('window:close', () => {
+    const focusedWindow = BrowserWindow.getFocusedWindow()
+    if (focusedWindow) {
+      focusedWindow.close()
+    }
+  })
 
   createWindow()
 

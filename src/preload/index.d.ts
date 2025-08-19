@@ -69,6 +69,11 @@ interface IPCInvokeMap {
   // crypto helpers
   'crypto:generate-password': (opts?: { length?: number; symbols?: boolean }) => string
   'crypto:evaluate-strength': (password: string) => { score: number; feedback?: string }
+
+  // window controls
+  'window:minimize': () => void
+  'window:maximize': () => void
+  'window:close': () => void
 }
 
 // password-related types are provided by `src/common/types/database.d.ts` as global declarations
@@ -134,6 +139,11 @@ interface PreloadAPI {
 
   // dev/test
   testCrypto(): Promise<{ success: boolean; path?: string; error?: string }>
+
+  // window controls
+  minimizeWindow(): Promise<void>
+  maximizeWindow(): Promise<void>
+  closeWindow(): Promise<void>
 }
 
 export {}
