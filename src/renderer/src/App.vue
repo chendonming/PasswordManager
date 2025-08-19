@@ -1,21 +1,8 @@
 <template>
-  <div
-    id="app"
-    :class="['h-screen', 'flex', 'flex-col', isDarkMode ? 'bg-gray-900' : 'bg-gray-50']"
-  >
+  <div id="app" class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
     <!-- 自定义标题栏 -->
     <div
-      :class="[
-        'h-12',
-        'border-b',
-        'flex',
-        'items-center',
-        'justify-between',
-        'px-4',
-        'drag-region',
-        isDarkMode ? 'bg-gray-800' : 'bg-white',
-        isDarkMode ? 'border-gray-700' : 'border-gray-200'
-      ]"
+      class="h-12 border-b flex items-center justify-between px-4 drag-region bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
     >
       <div class="flex items-center space-x-3 no-drag">
         <div class="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center">
@@ -27,24 +14,13 @@
             />
           </svg>
         </div>
-        <span :class="['text-sm', 'font-semibold', isDarkMode ? 'text-gray-300' : 'text-gray-700']"
-          >密码管理器</span
-        >
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">密码管理器</span>
       </div>
 
       <div class="flex-1 max-w-md mx-8 no-drag">
         <div class="relative">
           <svg
-            :class="[
-              'absolute',
-              'left-3',
-              'top-1/2',
-              'transform',
-              '-translate-y-1/2',
-              'w-4',
-              'h-4',
-              isDarkMode ? 'text-gray-500' : 'text-gray-400'
-            ]"
+            class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -60,21 +36,7 @@
             v-model="searchQuery"
             type="text"
             placeholder="搜索密码..."
-            :class="[
-              'w-full',
-              'pl-10',
-              'pr-4',
-              'py-1\\.5',
-              'text-sm',
-              'border-0',
-              'rounded-lg',
-              'focus:ring-1',
-              'focus:ring-blue-500',
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-100',
-              isDarkMode ? 'focus:bg-gray-600' : 'focus:bg-white',
-              isDarkMode ? 'text-gray-200' : 'text-gray-900',
-              isDarkMode ? 'placeholder-gray-400' : 'placeholder-gray-500'
-            ]"
+            class="w-full pl-10 pr-4 py-1.5 text-sm border-0 rounded-lg focus:ring-1 focus:ring-blue-500 bg-gray-100 dark:bg-gray-700 focus:bg-white dark:focus:bg-gray-600 text-gray-900 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-400"
           />
         </div>
       </div>
@@ -82,23 +44,13 @@
       <div class="flex items-center space-x-1 no-drag">
         <!-- 主题切换按钮 -->
         <button
-          :class="[
-            'w-8',
-            'h-8',
-            'rounded-lg',
-            'flex',
-            'items-center',
-            'justify-center',
-            'transition-colors',
-            'duration-200',
-            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-          ]"
+          class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
           :title="isDarkMode ? '切换到浅色主题' : '切换到深色主题'"
           @click="toggleTheme"
         >
           <svg
             v-if="isDarkMode"
-            :class="['w-4', 'h-4', isDarkMode ? 'text-gray-400' : 'text-gray-600']"
+            class="w-4 h-4 text-gray-600 dark:text-gray-400"
             fill="currentColor"
             viewBox="0 0 20 20"
           >
@@ -111,7 +63,7 @@
           </svg>
           <svg
             v-else
-            :class="['w-4', 'h-4', isDarkMode ? 'text-gray-400' : 'text-gray-600']"
+            class="w-4 h-4 text-gray-600 dark:text-gray-400"
             fill="currentColor"
             viewBox="0 0 20 20"
           >
@@ -121,22 +73,12 @@
         </button>
 
         <button
-          :class="[
-            'w-8',
-            'h-8',
-            'rounded-lg',
-            'flex',
-            'items-center',
-            'justify-center',
-            'transition-colors',
-            'duration-200',
-            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-          ]"
+          class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
           title="最小化"
           @click="minimizeWindow"
         >
           <svg
-            :class="['w-4', 'h-4', isDarkMode ? 'text-gray-400' : 'text-gray-600']"
+            class="w-4 h-4 text-gray-600 dark:text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -146,22 +88,12 @@
         </button>
 
         <button
-          :class="[
-            'w-8',
-            'h-8',
-            'rounded-lg',
-            'flex',
-            'items-center',
-            'justify-center',
-            'transition-colors',
-            'duration-200',
-            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-200'
-          ]"
+          class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
           title="最大化"
           @click="maximizeWindow"
         >
           <svg
-            :class="['w-4', 'h-4', isDarkMode ? 'text-gray-400' : 'text-gray-600']"
+            class="w-4 h-4 text-gray-600 dark:text-gray-400"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -176,19 +108,7 @@
         </button>
 
         <button
-          :class="[
-            'w-8',
-            'h-8',
-            'rounded-lg',
-            'flex',
-            'items-center',
-            'justify-center',
-            'transition-all',
-            'duration-200',
-            'hover:bg-red-500',
-            'hover:text-white',
-            isDarkMode ? 'text-gray-400' : 'text-gray-600'
-          ]"
+          class="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 hover:bg-red-500 hover:text-white text-gray-600 dark:text-gray-400"
           title="关闭"
           @click="closeWindow"
         >
@@ -217,15 +137,11 @@
       />
 
       <!-- 主内容区 -->
-      <div :class="['flex-1', isDarkMode ? 'bg-gray-900' : 'bg-white']">
+      <div class="flex-1 bg-white dark:bg-gray-900">
         <!-- 全部密码视图 -->
         <div v-if="activeTab === 'all'" class="p-6">
           <div class="flex items-center justify-between mb-6">
-            <h2
-              :class="['text-xl', 'font-semibold', isDarkMode ? 'text-gray-100' : 'text-gray-900']"
-            >
-              全部密码
-            </h2>
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">全部密码</h2>
             <button
               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
             >
@@ -237,33 +153,15 @@
             <div
               v-for="password in mockPasswords"
               :key="password.id"
-              :class="[
-                'p-4',
-                'border',
-                'rounded-lg',
-                'cursor-pointer',
-                'transition-colors',
-                'duration-200',
-                isDarkMode
-                  ? 'border-gray-700 hover:bg-gray-800'
-                  : 'border-gray-200 hover:bg-gray-50'
-              ]"
+              class="p-4 border rounded-lg cursor-pointer transition-colors duration-200 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
                   <div
-                    :class="[
-                      'w-10',
-                      'h-10',
-                      'rounded-lg',
-                      'flex',
-                      'items-center',
-                      'justify-center',
-                      isDarkMode ? 'bg-gray-700' : 'bg-gray-100'
-                    ]"
+                    class="w-10 h-10 rounded-lg flex items-center justify-center bg-gray-100 dark:bg-gray-700"
                   >
                     <svg
-                      :class="['w-5', 'h-5', isDarkMode ? 'text-gray-400' : 'text-gray-600']"
+                      class="w-5 h-5 text-gray-600 dark:text-gray-400"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -277,10 +175,10 @@
                     </svg>
                   </div>
                   <div>
-                    <h3 :class="['font-medium', isDarkMode ? 'text-gray-100' : 'text-gray-900']">
+                    <h3 class="font-medium text-gray-900 dark:text-gray-100">
                       {{ password.title }}
                     </h3>
-                    <p :class="['text-sm', isDarkMode ? 'text-gray-400' : 'text-gray-500']">
+                    <p class="text-sm text-gray-500 dark:text-gray-400">
                       {{ password.username }}
                     </p>
                   </div>
@@ -299,13 +197,7 @@
         <div v-else-if="activeTab === 'favorites'" class="p-6">
           <div class="text-center py-12">
             <svg
-              :class="[
-                'w-16',
-                'h-16',
-                'mx-auto',
-                'mb-4',
-                isDarkMode ? 'text-gray-600' : 'text-gray-300'
-              ]"
+              class="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-gray-600"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -317,19 +209,10 @@
                 d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
               />
             </svg>
-            <h3
-              :class="[
-                'text-lg',
-                'font-medium',
-                'mb-2',
-                isDarkMode ? 'text-gray-100' : 'text-gray-900'
-              ]"
-            >
+            <h3 class="text-lg font-medium mb-2 text-gray-900 dark:text-gray-100">
               暂无收藏的密码
             </h3>
-            <p :class="[isDarkMode ? 'text-gray-400' : 'text-gray-500']">
-              将重要的密码添加到收藏夹，方便快速访问
-            </p>
+            <p class="text-gray-500 dark:text-gray-400">将重要的密码添加到收藏夹，方便快速访问</p>
           </div>
         </div>
 

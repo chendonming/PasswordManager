@@ -1,16 +1,9 @@
 <template>
   <div
-    :class="[
-      'w-64',
-      'border-r',
-      'flex',
-      'flex-col',
-      isDarkMode ? 'bg-gray-800' : 'bg-gray-50',
-      isDarkMode ? 'border-gray-700' : 'border-gray-200'
-    ]"
+    class="w-64 border-r flex flex-col bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
   >
     <!-- 用户信息区域 -->
-    <div :class="['p-4', 'border-b', isDarkMode ? 'border-gray-700' : 'border-gray-200']">
+    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
       <div class="flex items-center space-x-3">
         <div class="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
           <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -22,17 +15,10 @@
           </svg>
         </div>
         <div class="flex-1 min-w-0">
-          <p
-            :class="[
-              'text-sm',
-              'font-medium',
-              'truncate',
-              isDarkMode ? 'text-gray-100' : 'text-gray-900'
-            ]"
-          >
+          <p class="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
             {{ userInfo.username || '用户' }}
           </p>
-          <p :class="['text-xs', isDarkMode ? 'text-gray-400' : 'text-gray-500']">
+          <p class="text-xs text-gray-500 dark:text-gray-400">
             {{ userInfo.passwordCount || 0 }} 个密码
           </p>
         </div>
@@ -46,24 +32,10 @@
           v-for="item in navigationItems"
           :key="item.id"
           :class="[
-            'w-full',
-            'flex',
-            'items-center',
-            'space-x-3',
-            'px-3',
-            'py-2',
-            'text-sm',
-            'font-medium',
-            'rounded-lg',
-            'transition-colors',
-            'duration-200',
+            'w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200',
             activeTab === item.id
-              ? isDarkMode
-                ? 'bg-blue-900/50 text-blue-300'
-                : 'bg-blue-100 text-blue-700'
-              : isDarkMode
-                ? 'text-gray-300 hover:bg-gray-700'
-                : 'text-gray-700 hover:bg-gray-100'
+              ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
           ]"
           @click="$emit('navigate', item.id)"
         >
@@ -71,15 +43,7 @@
           <span>{{ item.label }}</span>
           <span
             v-if="item.count !== undefined"
-            :class="[
-              'ml-auto',
-              'text-xs',
-              'px-2',
-              'py-0.5',
-              'rounded-full',
-              isDarkMode ? 'bg-gray-700' : 'bg-gray-200',
-              isDarkMode ? 'text-gray-300' : 'text-gray-600'
-            ]"
+            class="ml-auto text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
           >
             {{ item.count }}
           </span>
@@ -89,9 +53,13 @@
       <!-- 标签分组 -->
       <div v-if="tags && tags.length > 0" class="pt-4">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">标签</h3>
+          <h3
+            class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+          >
+            标签
+          </h3>
           <button
-            class="w-5 h-5 text-gray-400 hover:text-blue-600 transition-colors duration-200"
+            class="w-5 h-5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200"
             title="添加标签"
             @click="$emit('add-tag')"
           >
@@ -109,35 +77,22 @@
           <button
             v-for="tag in tags"
             :key="tag.id"
-            class="w-full flex items-center space-x-2 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-100 transition-colors duration-200"
+            class="w-full flex items-center space-x-2 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
             @click="$emit('filter-by-tag', tag.id)"
           >
             <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
-            <span class="flex-1 text-left text-gray-700">{{ tag.name }}</span>
-            <span class="text-xs text-gray-500">{{ tag.count || 0 }}</span>
+            <span class="flex-1 text-left text-gray-700 dark:text-gray-200">{{ tag.name }}</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">{{ tag.count || 0 }}</span>
           </button>
         </div>
       </div>
     </nav>
 
     <!-- 底部操作区域 -->
-    <div :class="['p-4', 'border-t', isDarkMode ? 'border-gray-700' : 'border-gray-200']">
+    <div class="p-4 border-t border-gray-200 dark:border-gray-700">
       <div class="space-y-2">
         <button
-          :class="[
-            'w-full',
-            'flex',
-            'items-center',
-            'space-x-3',
-            'px-3',
-            'py-2',
-            'text-sm',
-            'rounded-lg',
-            'transition-colors',
-            'duration-200',
-            isDarkMode ? 'text-gray-300' : 'text-gray-700',
-            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-          ]"
+          class="w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
           @click="$emit('sync')"
         >
           <svg
@@ -157,20 +112,7 @@
         </button>
 
         <button
-          :class="[
-            'w-full',
-            'flex',
-            'items-center',
-            'space-x-3',
-            'px-3',
-            'py-2',
-            'text-sm',
-            'rounded-lg',
-            'transition-colors',
-            'duration-200',
-            isDarkMode ? 'text-gray-300' : 'text-gray-700',
-            isDarkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'
-          ]"
+          class="w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
           @click="$emit('settings')"
         >
           <svg
