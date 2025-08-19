@@ -25,6 +25,8 @@
           :selected-entry-id="selectedEntryId"
           @add-password="handleAddPassword"
           @select-entry="handleSelectEntry"
+          @edit-entry="handleEditEntry"
+          @delete-entry="handleDeleteEntry"
         />
 
         <!-- 收藏夹视图 -->
@@ -36,6 +38,8 @@
           :selected-entry-id="selectedEntryId"
           @add-password="handleAddPassword"
           @select-entry="handleSelectEntry"
+          @edit-entry="handleEditEntry"
+          @delete-entry="handleDeleteEntry"
         />
 
         <!-- 最近使用视图 -->
@@ -47,6 +51,8 @@
           :selected-entry-id="selectedEntryId"
           @add-password="handleAddPassword"
           @select-entry="handleSelectEntry"
+          @edit-entry="handleEditEntry"
+          @delete-entry="handleDeleteEntry"
         />
 
         <!-- 密码生成器视图 -->
@@ -56,6 +62,28 @@
         <WelcomeView v-else @navigate="handleNavigate" />
       </div>
     </div>
+
+    <!-- 添加密码弹窗 -->
+    <Modal :visible="showPasswordModal" title="添加密码" size="lg" @close="closePasswordModal">
+      <PasswordForm ref="passwordFormRef" @submit="handlePasswordSubmit" />
+
+      <template #footer>
+        <button
+          type="button"
+          class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+          @click="closePasswordModal"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors duration-200"
+          @click="submitPasswordForm"
+        >
+          保存
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -66,6 +94,8 @@ import TitleBar from './components/TitleBar.vue'
 import PasswordList from './components/PasswordList.vue'
 import PasswordGenerator from './components/PasswordGenerator.vue'
 import WelcomeView from './components/WelcomeView.vue'
+import Modal from './components/Modal.vue'
+import PasswordForm from './components/PasswordForm.vue'
 
 // 定义密码条目类型
 interface Tag {
@@ -89,10 +119,22 @@ interface DecryptedPasswordEntry {
   tags: Tag[]
 }
 
+// 定义密码表单数据类型
+interface PasswordFormData {
+  title: string
+  username: string
+  password: string
+  url: string
+  description: string
+  is_favorite: boolean
+}
+
 // 响应式数据
 const activeTab = ref('all')
 const searchQuery = ref('')
 const selectedEntryId = ref<number | undefined>(undefined)
+const showPasswordModal = ref(false)
+const passwordFormRef = ref<InstanceType<typeof PasswordForm> | null>(null)
 
 // 主题管理
 const isDarkMode = ref(false)
@@ -214,14 +256,81 @@ const handleSearch = (query: string): void => {
 }
 
 const handleAddPassword = (): void => {
-  console.log('添加密码')
-  // 这里可以打开添加密码的模态框或导航到添加页面
+  showPasswordModal.value = true
+  console.log('打开添加密码弹窗')
+}
+
+const closePasswordModal = (): void => {
+  showPasswordModal.value = false
+}
+
+const handlePasswordSubmit = (data: PasswordFormData): void => {
+  console.log('提交密码数据:', data)
+  // 这里处理密码保存逻辑
+  const newPassword: DecryptedPasswordEntry = {
+    id: mockPasswords.value.length + 1,
+    title: data.title,
+    username: data.username,
+    password: data.password,
+    url: data.url,
+    description: data.description,
+    is_favorite: data.is_favorite,
+    password_strength: calculatePasswordStrength(data.password),
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    tags: []
+  }
+
+  mockPasswords.value.push(newPassword)
+  closePasswordModal()
+}
+
+const submitPasswordForm = (): void => {
+  // 触发表单提交
+  if (passwordFormRef.value) {
+    const formElement = passwordFormRef.value.$el?.querySelector('form')
+    if (formElement) {
+      formElement.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }))
+    }
+  }
+}
+
+const calculatePasswordStrength = (password: string): number => {
+  let score = 0
+
+  // 长度评分
+  if (password.length >= 8) score += 25
+  if (password.length >= 12) score += 25
+
+  // 复杂度评分
+  if (/[a-z]/.test(password)) score += 10
+  if (/[A-Z]/.test(password)) score += 10
+  if (/[0-9]/.test(password)) score += 10
+  if (/[^a-zA-Z0-9]/.test(password)) score += 20
+
+  return Math.min(score, 100)
 }
 
 const handleSelectEntry = (entry: DecryptedPasswordEntry): void => {
   selectedEntryId.value = entry.id
   console.log('选择密码条目:', entry.title)
   // 这里可以显示密码详情或进行其他操作
+}
+
+const handleEditEntry = (entry: DecryptedPasswordEntry): void => {
+  console.log('编辑密码条目:', entry.title)
+  // TODO: 实现编辑功能，可以打开编辑弹窗并预填数据
+  showPasswordModal.value = true
+}
+
+const handleDeleteEntry = (id: number): void => {
+  console.log('删除密码条目:', id)
+  // 从模拟数据中删除条目
+  const index = mockPasswords.value.findIndex((p) => p.id === id)
+  if (index > -1) {
+    mockPasswords.value.splice(index, 1)
+    console.log('密码条目已删除')
+  }
 }
 </script>
 

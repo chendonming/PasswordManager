@@ -26,7 +26,10 @@
         </select>
 
         <!-- 添加密码按钮 -->
-        <button class="btn-primary" @click="$emit('add-password')">
+        <button
+          class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 active:scale-95 transition-all duration-150 flex items-center text-sm font-medium"
+          @click="$emit('add-password')"
+        >
           <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -56,12 +59,17 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+            d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1721 9z"
           />
         </svg>
         <p class="text-lg font-medium mb-2">暂无密码条目</p>
         <p class="text-sm mb-4">开始添加您的第一个密码</p>
-        <button class="btn-primary" @click="$emit('add-password')">添加密码</button>
+        <button
+          class="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 active:scale-95 transition-all duration-150 text-sm font-medium"
+          @click="$emit('add-password')"
+        >
+          添加密码
+        </button>
       </div>
 
       <div v-else class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -69,7 +77,7 @@
           v-for="entry in sortedEntries"
           :key="entry.id"
           :class="[
-            'p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors duration-200',
+            'p-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-colors duration-200 group',
             selectedEntryId === entry.id ? 'bg-primary-50 dark:bg-primary-900/20' : ''
           ]"
           @click="$emit('select-entry', entry)"
@@ -157,18 +165,7 @@
 
             <div class="flex items-center space-x-2 flex-shrink-0">
               <!-- 密码强度指示器 -->
-              <div class="flex items-center space-x-1">
-                <div class="flex space-x-1">
-                  <div
-                    v-for="i in 4"
-                    :key="i"
-                    :class="[
-                      'w-1 h-4 rounded-full',
-                      getPasswordStrengthColor(entry.password_strength, i)
-                    ]"
-                  ></div>
-                </div>
-              </div>
+              <PasswordStrengthIndicator :strength="entry.password_strength" size="sm" />
 
               <!-- 快捷操作按钮 -->
               <div
@@ -176,7 +173,7 @@
               >
                 <button
                   title="复制用户名"
-                  class="btn-icon hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
                   @click.stop="copyToClipboard(entry.username || '')"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,7 +188,7 @@
 
                 <button
                   title="复制密码"
-                  class="btn-icon hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
                   @click.stop="copyToClipboard(entry.password)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -199,7 +196,37 @@
                       stroke-linecap="round"
                       stroke-linejoin="round"
                       stroke-width="2"
-                      d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+                      d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1721 9z"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  title="编辑"
+                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+                  @click.stop="$emit('edit-entry', entry)"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  title="删除"
+                  class="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200"
+                  @click.stop="handleDelete(entry)"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                     />
                   </svg>
                 </button>
@@ -214,11 +241,53 @@
         </div>
       </div>
     </div>
+
+    <!-- 删除确认弹窗 -->
+    <Modal :visible="showDeleteModal" title="确认删除" size="sm" @close="closeDeleteModal">
+      <div class="text-center">
+        <svg
+          class="w-12 h-12 mx-auto mb-4 text-red-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"
+          />
+        </svg>
+        <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">确认删除密码</h3>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          您确定要删除 "{{ entryToDelete?.title }}" 吗？此操作无法撤销。
+        </p>
+      </div>
+
+      <template #footer>
+        <button
+          type="button"
+          class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+          @click="closeDeleteModal"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 active:bg-red-800 transition-colors duration-200"
+          @click="confirmDelete"
+        >
+          删除
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import PasswordStrengthIndicator from './PasswordStrengthIndicator.vue'
+import Modal from './Modal.vue'
 
 // 定义 props
 interface Tag {
@@ -256,13 +325,17 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 // 定义 emits
-defineEmits<{
+const emit = defineEmits<{
   'add-password': []
   'select-entry': [entry: DecryptedPasswordEntry]
+  'edit-entry': [entry: DecryptedPasswordEntry]
+  'delete-entry': [id: number]
 }>()
 
 // 响应式数据
 const sortBy = ref<string>('updated_at')
+const showDeleteModal = ref(false)
+const entryToDelete = ref<DecryptedPasswordEntry | null>(null)
 
 // 计算属性
 const filteredEntries = computed(() => {
@@ -335,17 +408,6 @@ const formatDate = (dateString: string): string => {
   return `${Math.floor(diffDays / 365)}年前`
 }
 
-const getPasswordStrengthColor = (strength: number, position: number): string => {
-  const filled = position <= Math.ceil(strength / 25)
-
-  if (!filled) return 'bg-gray-200 dark:bg-gray-600'
-
-  if (strength < 25) return 'bg-red-400'
-  if (strength < 50) return 'bg-yellow-400'
-  if (strength < 75) return 'bg-blue-400'
-  return 'bg-green-400'
-}
-
 const copyToClipboard = async (text: string): Promise<void> => {
   try {
     await navigator.clipboard.writeText(text)
@@ -353,6 +415,24 @@ const copyToClipboard = async (text: string): Promise<void> => {
     console.log('复制成功')
   } catch (err) {
     console.error('复制失败:', err)
+  }
+}
+
+// 删除相关方法
+const handleDelete = (entry: DecryptedPasswordEntry): void => {
+  entryToDelete.value = entry
+  showDeleteModal.value = true
+}
+
+const closeDeleteModal = (): void => {
+  showDeleteModal.value = false
+  entryToDelete.value = null
+}
+
+const confirmDelete = (): void => {
+  if (entryToDelete.value) {
+    emit('delete-entry', entryToDelete.value.id)
+    closeDeleteModal()
   }
 }
 </script>
