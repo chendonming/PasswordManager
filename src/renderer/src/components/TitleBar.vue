@@ -46,7 +46,7 @@
           v-model="searchQuery"
           type="text"
           placeholder="搜索密码..."
-          class="w-full pl-10 pr-4 py-1.5 text-sm bg-gray-100 border-0 rounded-lg focus:bg-white focus:ring-1 focus:ring-primary-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+          class="w-full pl-10 pr-4 py-1.5 text-sm text-gray-900 bg-gray-100 border-0 rounded-lg focus:bg-white focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400 dark:focus:bg-gray-600"
           @input="$emit('search', searchQuery)"
         />
       </div>
