@@ -94,15 +94,7 @@
               <div
                 class="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0"
               >
-                <img
-                  v-if="entry.url && getFaviconUrl(entry.url)"
-                  :src="getFaviconUrl(entry.url)"
-                  :alt="entry.title"
-                  class="w-6 h-6 rounded"
-                  @error="showDefaultIcon"
-                />
                 <svg
-                  v-else
                   class="w-6 h-6 text-gray-400"
                   fill="none"
                   stroke="currentColor"
@@ -382,21 +374,6 @@ const sortedEntries = computed(() => {
     }
   })
 })
-
-// 工具方法
-const getFaviconUrl = (url: string): string => {
-  try {
-    const domain = new URL(url).hostname
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
-  } catch {
-    return ''
-  }
-}
-
-const showDefaultIcon = (event: Event): void => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-}
 
 const formatUrl = (url: string): string => {
   try {

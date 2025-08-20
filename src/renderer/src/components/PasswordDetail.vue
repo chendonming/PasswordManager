@@ -8,20 +8,7 @@
         <div
           class="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center flex-shrink-0"
         >
-          <img
-            v-if="entry.url && getFaviconUrl(entry.url)"
-            :src="getFaviconUrl(entry.url)"
-            :alt="entry.title"
-            class="w-8 h-8 rounded-lg"
-            @error="showDefaultIcon"
-          />
-          <svg
-            v-else
-            class="w-8 h-8 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
+          <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -375,21 +362,6 @@ const copyField = (field: string, value: string): void => {
 const openUrl = (url: string): void => {
   window.open(url, '_blank')
 }
-
-const getFaviconUrl = (url: string): string => {
-  try {
-    const domain = new URL(url).hostname
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
-  } catch {
-    return ''
-  }
-}
-
-const showDefaultIcon = (event: Event): void => {
-  const img = event.target as HTMLImageElement
-  img.style.display = 'none'
-}
-
 const formatUrl = (url: string): string => {
   if (!url) return ''
   try {

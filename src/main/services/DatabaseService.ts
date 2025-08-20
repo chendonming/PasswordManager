@@ -180,6 +180,14 @@ export class DatabaseService implements DatabaseServiceInterface {
             } catch (e) {
               console.warn('通知渲染进程 autosave:completed 失败:', e)
             }
+            // Ensure the newly created in-memory DB is fully persisted to disk.
+            // This avoids a race where the first subsequent operation (e.g. import)
+            // may not persist if the initial write hasn't completed.
+            try {
+              await this.forceFlush()
+            } catch (e) {
+              console.warn('首次写回 .enc 后强制刷新失败:', e)
+            }
             return
           } catch (e) {
             console.error('尝试覆盖 .enc 失败:', e)
@@ -273,6 +281,12 @@ export class DatabaseService implements DatabaseServiceInterface {
 
       this.isInitialized = true
       console.log('已创建内存数据库并加密写回 .enc')
+      // Ensure persisted on disk immediately to avoid first-operation persistence issues
+      try {
+        await this.forceFlush()
+      } catch (e) {
+        console.warn('首次创建内存 DB 后强制刷新失败:', e)
+      }
       return
     } catch (err) {
       console.error('创建并加密新数据库失败:', err)
@@ -644,37 +658,71 @@ export class DatabaseService implements DatabaseServiceInterface {
    */
   private async forceFlush(): Promise<void> {
     if (!this.db) return
-    if (!this.encryptedDbPath || !this.encryptionKey) return
 
     this.isSaving = true
     try {
-      const serialized = this.db.serialize()
+      // 如果存在加密路径和密钥，序列化并加密写回（内存数据库场景）
+      if (this.encryptedDbPath && this.encryptionKey) {
+        const serialized = this.db.serialize()
 
-      // close the db to ensure consistent serialization on disk
-      try {
-        this.db.close()
-      } catch {
-        // ignore
+        // close the db to ensure consistent serialization on disk
+        try {
+          this.db.close()
+        } catch {
+          // ignore
+        }
+        this.db = new Database(serialized, { verbose: console.log })
+
+        await CryptoService.encryptBufferToFile(
+          serialized,
+          this.encryptedDbPath!,
+          this.encryptionKey!
+        )
+        CryptoService.clearBuffer(serialized)
+        this.isDirty = false
+        console.log('强制保存完成：已将内存 DB 序列化并加密回磁盘')
+
+        // Notify renderer windows about save completion
+        try {
+          const payload = { timestamp: Date.now(), path: this.encryptedDbPath }
+          BrowserWindow.getAllWindows().forEach((w) => {
+            w.webContents.send('autosave:completed', payload)
+          })
+        } catch (e) {
+          console.warn('通知渲染进程 autosave:completed 失败:', e)
+        }
+        return
       }
-      this.db = new Database(serialized, { verbose: console.log })
 
-      await CryptoService.encryptBufferToFile(
-        serialized,
-        this.encryptedDbPath!,
-        this.encryptionKey!
-      )
-      CryptoService.clearBuffer(serialized)
-      this.isDirty = false
-      console.log('强制保存完成：已将内存 DB 序列化并加密回磁盘')
+      // 否则如果是基于文件的 DB（plainDbPath），尝试执行 WAL checkpoint 确保写回主数据库文件
+      if (this.plainDbPath) {
+        try {
+          // 执行 WAL checkpoint（TRUNCATE）以把 WAL 内容写回主 DB
+          try {
+            this.db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+          } catch {
+            // 某些环境下 exec 可能抛错，退回到更温和的 checkpoint
+            try {
+              this.db.exec('PRAGMA wal_checkpoint(FULL)')
+            } catch (err) {
+              console.warn('WAL checkpoint 失败:', err)
+            }
+          }
 
-      // Notify renderer windows about save completion
-      try {
-        const payload = { timestamp: Date.now(), path: this.encryptedDbPath }
-        BrowserWindow.getAllWindows().forEach((w) => {
-          w.webContents.send('autosave:completed', payload)
-        })
-      } catch (e) {
-        console.warn('通知渲染进程 autosave:completed 失败:', e)
+          this.isDirty = false
+          console.log('强制保存完成：已将 WAL checkpoint 到磁盘')
+
+          try {
+            const payload = { timestamp: Date.now(), path: this.plainDbPath }
+            BrowserWindow.getAllWindows().forEach((w) => {
+              w.webContents.send('autosave:completed', payload)
+            })
+          } catch (e) {
+            console.warn('通知渲染进程 autosave:completed 失败:', e)
+          }
+        } catch (e) {
+          console.error('plain DB 强制保存失败:', e)
+        }
       }
     } finally {
       this.isSaving = false
@@ -857,6 +905,93 @@ export class DatabaseService implements DatabaseServiceInterface {
     // 立即保存到磁盘，确保创建操作持久化
     await this.forceFlush()
     return createdEntry
+  }
+
+  /**
+   * 批量创建密码条目（在单个事务中插入并在结束后一次性持久化）
+   */
+  async createPasswordEntries(
+    inputs: CreatePasswordEntryInput[]
+  ): Promise<DecryptedPasswordEntry[]> {
+    this.ensureInitialized()
+    this.ensureEncryptionKey()
+
+    const createdIds: number[] = []
+
+    const transaction = this.db!.transaction(() => {
+      const insertStmt = this.db!.prepare(`
+        INSERT INTO password_entries (
+          title, username, password, url, description,
+          encryption_iv, encryption_tag, is_favorite, password_strength
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+
+      const tagStmt = this.db!.prepare(`
+        INSERT INTO entry_tags (entry_id, tag_id) VALUES (?, ?)
+      `)
+
+      const logStmt = (entryId: number, input: CreatePasswordEntryInput): void => {
+        this.logAction({
+          action: 'CREATE',
+          table_name: 'password_entries',
+          record_id: entryId,
+          details: JSON.stringify({
+            title: input.title,
+            url: input.url,
+            tag_count: input.tag_ids?.length || 0
+          })
+        })
+      }
+
+      for (const input of inputs) {
+        const encryptedUsername = input.username || null
+        const encryptedPassword = this.encryptField(input.password)
+        const encryptedDescription = input.description || null
+
+        const passwordStrength = CryptoService.evaluatePasswordStrength(input.password)
+
+        const params = [
+          input.title,
+          encryptedUsername || null,
+          encryptedPassword.encrypted,
+          input.url || null,
+          encryptedDescription || null,
+          encryptedPassword.iv,
+          encryptedPassword.tag,
+          input.is_favorite ? 1 : 0,
+          passwordStrength
+        ]
+
+        const result = insertStmt.run(...params)
+        const entryId = Number(result.lastInsertRowid)
+        createdIds.push(entryId)
+
+        // 关联标签（输入.tags 是名称数组，这里需查找 tag id）
+        if (input.tag_ids && input.tag_ids.length > 0) {
+          for (const tagId of input.tag_ids) {
+            tagStmt.run(entryId, tagId)
+          }
+        }
+
+        // 记录审计日志（通过 helper）
+        logStmt(entryId, input)
+      }
+    })
+
+    transaction()
+
+    // 批量完成后，统一标记脏并一次性 flush
+    this.markDirty()
+    await this.forceFlush()
+
+    // 返回已创建条目的完整信息
+    const createdEntries: DecryptedPasswordEntry[] = []
+    for (const id of createdIds) {
+      const entry = await this.getPasswordEntryById(id)
+      if (entry) createdEntries.push(entry)
+    }
+
+    return createdEntries
   }
 
   async updatePasswordEntry(

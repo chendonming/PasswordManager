@@ -6,9 +6,7 @@ import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
 import { ImportManager } from './services/ImportManager'
-import { ExportManager } from './services/ExportManager'
 import { ChromeCsvImporter } from './services/importers/ChromeCsvImporter'
-import { DecryptedPasswordEntry } from '../common/types/database'
 
 /**
  * 数据库和安全服务的主进程管理器
@@ -18,14 +16,14 @@ export class MainProcessManager {
   private dbService: DatabaseService
   private initializer: DatabaseInitializer
   private importManager: ImportManager
-  private exportManager: ExportManager
+
   private isAuthenticated = false
 
   constructor() {
     this.dbService = new DatabaseService()
     this.initializer = new DatabaseInitializer(this.dbService)
     this.importManager = new ImportManager()
-    this.exportManager = new ExportManager()
+
     this.setupIpcHandlers()
     this.initializeImportExportServices()
   }
@@ -455,38 +453,67 @@ export class MainProcessManager {
             return previewResult
           }
 
-          // 实际保存密码到数据库
+          // 实际保存密码到数据库（批量处理以减少磁盘写入）
           const { entries } = previewResult.data
-          const importedEntries: DecryptedPasswordEntry[] = []
 
+          // 获取已有标签并建立 name->id 映射
+          const existingTags = await this.dbService.getAllTags()
+          const tagNameToId = new Map<string, number>()
+          for (const t of existingTags) tagNameToId.set(t.name, t.id)
+
+          // 用于收集所有需要创建的标签名字
+          const tagsToCreate = new Set<string>()
+
+          // 构建 CreatePasswordEntryInput 数组
+          const passwordInputs: any[] = []
           for (const entry of entries) {
-            try {
-              // 转换为CreatePasswordEntryInput格式
-              const passwordInput = {
-                title: entry.title || '未命名',
-                username: entry.username || '',
-                password: entry.password || '',
-                url: entry.url || '',
-                description: entry.description || '',
-                tags: entry.tags?.map((tag) => tag.name) || [],
-                is_favorite: entry.is_favorite || false
-              }
+            const tagNames: string[] = (entry.tags || []).map((t: any) => t.name).filter(Boolean)
+            for (const name of tagNames) {
+              if (!tagNameToId.has(name)) tagsToCreate.add(name)
+            }
 
-              // 保存到数据库
-              const savedEntry = await this.dbService.createPasswordEntry(passwordInput)
-              importedEntries.push(savedEntry)
-            } catch (saveError) {
-              console.error('保存密码条目失败:', saveError)
-              // 继续处理其他条目
+            passwordInputs.push({
+              title: entry.title || '未命名',
+              username: entry.username || '',
+              password: entry.password || '',
+              url: entry.url || '',
+              description: entry.description || '',
+              tag_ids: [], // later fill with ids
+              is_favorite: entry.is_favorite || false
+            })
+          }
+
+          // 创建缺失的标签并更新映射
+          for (const tagName of tagsToCreate) {
+            try {
+              const createdTag = await this.dbService.createTag({ name: tagName })
+              tagNameToId.set(createdTag.name, createdTag.id)
+            } catch (e) {
+              console.error('创建标签失败:', tagName, e)
             }
           }
 
+          // 填充 tag_ids
+          for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i]
+            const tagNames: string[] = (entry.tags || []).map((t: any) => t.name).filter(Boolean)
+            const ids: number[] = []
+            for (const name of tagNames) {
+              const id = tagNameToId.get(name)
+              if (id) ids.push(id)
+            }
+            passwordInputs[i].tag_ids = ids
+          }
+
+          // 调用批量创建接口
+          const createdEntries = await this.dbService.createPasswordEntries(passwordInputs)
+
           return {
             success: true,
-            message: `成功导入${importedEntries.length}条密码记录`,
+            message: `成功导入${createdEntries.length}条密码记录`,
             data: {
               ...previewResult.data,
-              entries: importedEntries
+              entries: createdEntries
             }
           }
         } catch (error) {

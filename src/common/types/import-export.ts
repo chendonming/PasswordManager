@@ -239,20 +239,20 @@ export interface ImportStatistics {
 export interface IExporter {
   /** 导出器名称 */
   readonly name: string
-  
+
   /** 支持的导出格式 */
   readonly supportedFormats: ExportFormat[]
-  
+
   /** 验证导出配置 */
   validateConfig(config: ExportConfig): OperationResult<boolean>
-  
+
   /** 导出数据 */
   export(
     data: ExportData,
     config: ExportConfig,
     progressCallback?: ProgressCallback
   ): Promise<OperationResult<string>>
-  
+
   /** 获取默认配置 */
   getDefaultConfig(format: ExportFormat): Partial<ExportConfig>
 }
@@ -261,22 +261,22 @@ export interface IExporter {
 export interface IImporter {
   /** 导入器名称 */
   readonly name: string
-  
+
   /** 支持的导入格式 */
   readonly supportedFormats: ImportFormat[]
-  
+
   /** 验证导入配置 */
   validateConfig(config: ImportConfig): OperationResult<boolean>
-  
+
   /** 预览导入数据（不实际导入） */
   preview(config: ImportConfig): Promise<OperationResult<ImportPreviewData>>
-  
+
   /** 导入数据 */
   import(
     config: ImportConfig,
     progressCallback?: ProgressCallback
   ): Promise<OperationResult<ImportPreviewData>>
-  
+
   /** 获取默认配置 */
   getDefaultConfig(format: ImportFormat): Partial<ImportConfig>
 }
@@ -289,36 +289,36 @@ export interface IImporter {
 export interface IExportManager {
   /** 注册导出器 */
   registerExporter(exporter: IExporter): void
-  
+
   /** 注销导出器 */
   unregisterExporter(name: string): void
-  
+
   /** 获取支持的格式列表 */
   getSupportedFormats(): ExportFormat[]
-  
+
   /** 获取指定格式的导出器 */
   getExporter(format: ExportFormat): IExporter | null
-  
+
   /** 获取所有导出器 */
   getAllExporters(): IExporter[]
-  
+
   /** 导出数据 */
   export(
     data: ExportData,
     config: ExportConfig,
     progressCallback?: ProgressCallback
   ): Promise<OperationResult<string>>
-  
+
   /** 检查是否支持指定格式 */
   isFormatSupported(format: ExportFormat): boolean
-  
+
   /** 获取统计信息 */
   getStatistics(): {
     totalExporters: number
     supportedFormats: number
     exporterList: Array<{ name: string; formats: ExportFormat[] }>
   }
-  
+
   /** 清除所有导出器 */
   clear(): void
 }
@@ -327,38 +327,38 @@ export interface IExportManager {
 export interface IImportManager {
   /** 注册导入器 */
   registerImporter(importer: IImporter): void
-  
+
   /** 注销导入器 */
   unregisterImporter(name: string): void
-  
+
   /** 获取支持的格式列表 */
   getSupportedFormats(): ImportFormat[]
-  
+
   /** 获取指定格式的导入器 */
   getImporter(format: ImportFormat): IImporter | null
-  
+
   /** 获取所有导入器 */
   getAllImporters(): IImporter[]
-  
+
   /** 预览导入 */
   preview(config: ImportConfig): Promise<OperationResult<ImportPreviewData>>
-  
+
   /** 导入数据 */
   import(
     config: ImportConfig,
     progressCallback?: ProgressCallback
   ): Promise<OperationResult<ImportPreviewData>>
-  
+
   /** 检查是否支持指定格式 */
   isFormatSupported(format: ImportFormat): boolean
-  
+
   /** 获取统计信息 */
   getStatistics(): {
     totalImporters: number
     supportedFormats: number
     importerList: Array<{ name: string; formats: ImportFormat[] }>
   }
-  
+
   /** 清除所有导入器 */
   clear(): void
 }
