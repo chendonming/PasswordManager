@@ -2,6 +2,7 @@
   <div id="app" class="h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
     <!-- 自定义标题栏 -->
     <TitleBar
+      :entries="passwords"
       @search="handleSearch"
       @toggle-theme="toggleTheme"
       @import="handleImport"
@@ -77,12 +78,13 @@
           <PasswordList
             v-if="activeTab === 'all'"
             title="全部密码"
-            :entries="passwords"
+            :entries="displayedPasswords"
             :search-query="searchQuery"
             :selected-entry-id="selectedEntryId"
-            :total-count="statistics.totalEntries"
-            :has-more="hasMore"
-            :is-loading="isLoadingMore"
+            :total-count="isSearchMode ? searchResults.length : statistics.totalEntries"
+            :has-more="!isSearchMode && hasMore"
+            :is-loading="isSearchMode ? isSearching : isLoadingMore"
+            :use-server-search="isSearchMode"
             @add-password="handleAddPassword"
             @select-entry="handleSelectEntry"
             @edit-entry="handleEditEntry"
@@ -261,6 +263,16 @@ const currentPage = ref(1)
 const pageSize = ref(50)
 const hasMore = ref(true)
 const isLoadingMore = ref(false)
+
+// 搜索状态
+const isSearchMode = computed(() => searchQuery.value.trim() !== '')
+const searchResults = ref<DecryptedPasswordEntry[]>([])
+const isSearching = ref(false)
+
+// 显示的密码数据（根据是否在搜索模式切换）
+const displayedPasswords = computed(() => {
+  return isSearchMode.value ? searchResults.value : passwords.value
+})
 
 // 统计信息
 const statistics = ref({
@@ -523,8 +535,37 @@ const handleSettings = (): void => {
   console.log('打开设置')
 }
 
-const handleSearch = (query: string): void => {
+const handleSearch = async (query: string): Promise<void> => {
   searchQuery.value = query
+
+  if (query.trim() === '') {
+    // 清空搜索时，恢复分页数据
+    searchResults.value = []
+    if (passwords.value.length === 0) {
+      await loadPasswords(true)
+    }
+    return
+  }
+
+  // 执行全数据库搜索
+  try {
+    isSearching.value = true
+
+    // 搜索时获取更大的数据集（或所有数据）
+    const result = await window.api.searchPasswordEntries({
+      page: 1,
+      pageSize: 1000, // 获取更多数据用于搜索
+      query: query.trim()
+    })
+
+    searchResults.value = result.entries
+    console.log('搜索完成，找到', result.entries.length, '条结果')
+  } catch (err) {
+    console.error('搜索失败:', err)
+    error.value = err instanceof Error ? err.message : '搜索失败'
+  } finally {
+    isSearching.value = false
+  }
 }
 
 const handleAddPassword = (): void => {
@@ -558,6 +599,14 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
         passwords.value[index] = updatedPassword
       }
 
+      // 如果在搜索模式下，也要更新搜索结果
+      if (isSearchMode.value) {
+        const searchIndex = searchResults.value.findIndex((p) => p.id === editingEntry.value!.id)
+        if (searchIndex > -1) {
+          searchResults.value[searchIndex] = updatedPassword
+        }
+      }
+
       console.log('密码更新成功:', updatedPassword.title)
     } else {
       // 新增模式：创建新密码
@@ -572,6 +621,13 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
 
       // 添加到本地数组中
       passwords.value.push(newPassword)
+
+      // 如果在搜索模式下，检查新密码是否匹配当前搜索条件
+      if (isSearchMode.value && searchQuery.value) {
+        // 重新执行搜索以包含新创建的密码
+        await handleSearch(searchQuery.value)
+      }
+
       console.log('密码创建成功:', newPassword.title)
     }
 
@@ -621,6 +677,14 @@ const handleDeleteEntry = async (id: number): Promise<void> => {
     if (index > -1) {
       passwords.value.splice(index, 1)
       console.log('密码条目已删除')
+    }
+
+    // 如果在搜索模式下，也要从搜索结果中删除
+    if (isSearchMode.value) {
+      const searchIndex = searchResults.value.findIndex((p) => p.id === id)
+      if (searchIndex > -1) {
+        searchResults.value.splice(searchIndex, 1)
+      }
     }
 
     // 重新加载统计信息以更新正确的总数

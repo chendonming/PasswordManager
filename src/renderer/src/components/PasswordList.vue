@@ -10,6 +10,12 @@
         </h2>
         <span class="text-sm text-gray-500 dark:text-gray-400">
           {{ props.searchQuery ? filteredEntries.length : props.totalCount }} 项
+          <span
+            v-if="props.searchQuery && searchResult.searchType !== 'none'"
+            class="ml-2 px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-full text-xs"
+          >
+            {{ searchResult.searchType === 'fuzzy' ? '模糊搜索' : '精确搜索' }}
+          </span>
         </span>
       </div>
 
@@ -303,28 +309,9 @@
 import { ref, computed } from 'vue'
 import PasswordStrengthIndicator from './PasswordStrengthIndicator.vue'
 import Modal from './Modal.vue'
+import { usePasswordSearch, type DecryptedPasswordEntry } from '../composables/usePasswordSearch'
 
 // 定义 props
-interface Tag {
-  id: number
-  name: string
-  color: string
-}
-
-interface DecryptedPasswordEntry {
-  id: number
-  title: string
-  username?: string
-  password: string
-  url?: string
-  description?: string
-  is_favorite: boolean
-  password_strength: number
-  created_at: string
-  updated_at: string
-  last_used_at?: string
-  tags: Tag[]
-}
 
 interface Props {
   title?: string
@@ -334,6 +321,7 @@ interface Props {
   totalCount?: number
   hasMore?: boolean
   isLoading?: boolean
+  useServerSearch?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -342,7 +330,8 @@ const props = withDefaults(defineProps<Props>(), {
   searchQuery: '',
   totalCount: 0,
   hasMore: false,
-  isLoading: false
+  isLoading: false,
+  useServerSearch: false
 })
 
 // 定义 emits
@@ -360,19 +349,19 @@ const showDeleteModal = ref(false)
 const entryToDelete = ref<DecryptedPasswordEntry | null>(null)
 const scrollContainer = ref<HTMLElement | null>(null)
 
-// 计算属性
-const filteredEntries = computed(() => {
-  if (!props.searchQuery) return props.entries
+// 使用搜索组合式函数
+const entriesComputed = computed(() => props.entries)
+const searchQueryComputed = computed(() => props.searchQuery || '')
+const useServerSearchComputed = computed(() => props.useServerSearch)
+const searchResult = usePasswordSearch(
+  entriesComputed,
+  searchQueryComputed,
+  {},
+  useServerSearchComputed
+)
 
-  const query = props.searchQuery.toLowerCase()
-  return props.entries.filter(
-    (entry) =>
-      entry.title.toLowerCase().includes(query) ||
-      entry.username?.toLowerCase().includes(query) ||
-      entry.url?.toLowerCase().includes(query) ||
-      entry.tags?.some((tag) => tag.name.toLowerCase().includes(query))
-  )
-})
+// 计算属性
+const filteredEntries = computed(() => searchResult.value.entries)
 
 const sortedEntries = computed(() => {
   const entries = [...filteredEntries.value]
