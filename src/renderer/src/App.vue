@@ -15,7 +15,7 @@
       <!-- 侧边栏组件 -->
       <Sidebar
         :active-tab="activeTab"
-        :user-info="{ username: '用户', passwordCount: passwords.length }"
+        :user-info="{ username: '用户', passwordCount: statistics.totalEntries }"
         @navigate="handleNavigate"
         @sync="handleSync"
         @settings="handleSettings"
@@ -64,7 +64,7 @@
             <p class="text-gray-600 dark:text-gray-400 mb-4">{{ error }}</p>
             <button
               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors duration-200"
-              @click="loadPasswords"
+              @click="() => loadPasswords(true)"
             >
               重试
             </button>
@@ -80,10 +80,14 @@
             :entries="passwords"
             :search-query="searchQuery"
             :selected-entry-id="selectedEntryId"
+            :total-count="statistics.totalEntries"
+            :has-more="hasMore"
+            :is-loading="isLoadingMore"
             @add-password="handleAddPassword"
             @select-entry="handleSelectEntry"
             @edit-entry="handleEditEntry"
             @delete-entry="handleDeleteEntry"
+            @load-more="loadMorePasswords"
           />
 
           <!-- 收藏夹视图 -->
@@ -93,10 +97,14 @@
             :entries="favoritePasswords"
             :search-query="searchQuery"
             :selected-entry-id="selectedEntryId"
+            :total-count="statistics.favoriteEntries"
+            :has-more="false"
+            :is-loading="false"
             @add-password="handleAddPassword"
             @select-entry="handleSelectEntry"
             @edit-entry="handleEditEntry"
             @delete-entry="handleDeleteEntry"
+            @load-more="() => {}"
           />
 
           <!-- 最近使用视图 -->
@@ -106,10 +114,14 @@
             :entries="recentPasswords"
             :search-query="searchQuery"
             :selected-entry-id="selectedEntryId"
+            :total-count="statistics.recentlyUsed"
+            :has-more="false"
+            :is-loading="false"
             @add-password="handleAddPassword"
             @select-entry="handleSelectEntry"
             @edit-entry="handleEditEntry"
             @delete-entry="handleDeleteEntry"
+            @load-more="() => {}"
           />
 
           <!-- 密码生成器视图 -->
@@ -244,6 +256,20 @@ const showPasswordModal = ref(false)
 const passwordFormRef = ref<InstanceType<typeof PasswordForm> | null>(null)
 const authViewRef = ref<InstanceType<typeof AuthenticationView> | null>(null)
 
+// 分页状态
+const currentPage = ref(1)
+const pageSize = ref(50)
+const hasMore = ref(true)
+const isLoadingMore = ref(false)
+
+// 统计信息
+const statistics = ref({
+  totalEntries: 0,
+  totalTags: 0,
+  favoriteEntries: 0,
+  recentlyUsed: 0
+})
+
 // 主题管理
 const isDarkMode = ref(false)
 
@@ -305,7 +331,8 @@ onMounted(async () => {
 
   // 如果已认证，加载密码数据
   if (isAuthenticated.value) {
-    await loadPasswords()
+    await loadPasswords(true)
+    await loadStatistics()
   }
 })
 
@@ -395,7 +422,8 @@ const handleAuthenticate = async (data: {
     // 如果认证成功，清理表单并加载数据
     if (isAuthenticated.value) {
       authViewRef.value.clearForm()
-      await loadPasswords()
+      await loadPasswords(true)
+      await loadStatistics()
     }
   } catch (err) {
     console.error('主密码处理失败:', err)
@@ -406,24 +434,70 @@ const handleAuthenticate = async (data: {
 }
 
 // 数据加载方法
-const loadPasswords = async (): Promise<void> => {
+const loadPasswords = async (reset: boolean = false): Promise<void> => {
   try {
-    isLoading.value = true
+    if (reset) {
+      currentPage.value = 1
+      passwords.value = []
+      hasMore.value = true
+    }
+
+    isLoading.value = reset
+    if (!reset) {
+      isLoadingMore.value = true
+    }
     error.value = null
 
-    // 使用搜索API获取所有密码
+    // 使用搜索API获取密码
     const result = await window.api.searchPasswordEntries({
-      page: 1,
-      pageSize: 1000 // 获取所有密码
+      page: currentPage.value,
+      pageSize: pageSize.value
     })
 
-    passwords.value = result.entries
-    console.log('密码数据加载成功，共', result.entries.length, '条')
+    if (reset) {
+      passwords.value = result.entries
+    } else {
+      passwords.value = [...passwords.value, ...result.entries]
+    }
+
+    // 更新分页状态
+    hasMore.value =
+      result.entries.length === pageSize.value && passwords.value.length < result.total
+
+    console.log(
+      '密码数据加载成功，当前页:',
+      currentPage.value,
+      '本页条数:',
+      result.entries.length,
+      '总条数:',
+      passwords.value.length
+    )
   } catch (err) {
     error.value = err instanceof Error ? err.message : '加载密码失败'
     console.error('加载密码失败:', err)
   } finally {
     isLoading.value = false
+    isLoadingMore.value = false
+  }
+}
+
+// 加载更多密码
+const loadMorePasswords = async (): Promise<void> => {
+  if (isLoadingMore.value || !hasMore.value) return
+
+  currentPage.value += 1
+  await loadPasswords(false)
+}
+
+// 加载统计信息
+const loadStatistics = async (): Promise<void> => {
+  try {
+    //@ts-expect-error window.api injected by preload
+    const stats = await window.api.getStatistics()
+    statistics.value = stats
+    console.log('统计信息加载成功:', stats)
+  } catch (err) {
+    console.error('加载统计信息失败:', err)
   }
 }
 
@@ -501,6 +575,9 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
       console.log('密码创建成功:', newPassword.title)
     }
 
+    // 重新加载统计信息以更新计数
+    await loadStatistics()
+
     closePasswordModal()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '保存密码失败'
@@ -545,6 +622,9 @@ const handleDeleteEntry = async (id: number): Promise<void> => {
       passwords.value.splice(index, 1)
       console.log('密码条目已删除')
     }
+
+    // 重新加载统计信息以更新正确的总数
+    await loadStatistics()
   } catch (err) {
     error.value = err instanceof Error ? err.message : '删除密码失败'
     console.error('删除密码失败:', err)
@@ -620,8 +700,9 @@ const handleChromeImport = async (): Promise<void> => {
 
     if (importResult.success) {
       console.log('导入成功:', importResult.data)
-      // 重新加载密码列表
-      await loadPasswords()
+      // 重新加载密码列表和统计信息
+      await loadPasswords(true)
+      await loadStatistics()
       alert('导入成功！')
     } else {
       console.error('导入失败:', importResult.message)

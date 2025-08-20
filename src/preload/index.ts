@@ -207,6 +207,9 @@ const api = {
   getAuditLogs: async (opts?: { limit?: number }) =>
     (await api.invoke('audit:get-logs', opts)) as AuditLog[],
 
+  // statistics
+  getStatistics: async () => await api.invoke('stats:get'),
+
   // window controls
   minimizeWindow: async () => await api.invoke('window:minimize'),
   maximizeWindow: async () => await api.invoke('window:maximize'),

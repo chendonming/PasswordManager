@@ -155,6 +155,14 @@ interface PreloadAPI {
   logAction(input: CreateAuditLogInput): Promise<void>
   getAuditLogs(limit?: number): Promise<AuditLog[]>
 
+  // statistics
+  getStatistics(): Promise<{
+    totalEntries: number
+    totalTags: number
+    favoriteEntries: number
+    recentlyUsed: number
+  }>
+
   // auth helpers
   authCheckStatus(): Promise<{ status: string; message?: string }>
   authCreateMasterPassword(masterPassword: string): Promise<{ success: boolean; error?: string }>

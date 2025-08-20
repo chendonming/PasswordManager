@@ -9,7 +9,7 @@
           {{ title }}
         </h2>
         <span class="text-sm text-gray-500 dark:text-gray-400">
-          {{ filteredEntries.length }} 项
+          {{ props.searchQuery ? filteredEntries.length : props.totalCount }} 项
         </span>
       </div>
 
@@ -44,7 +44,7 @@
     </div>
 
     <!-- 密码列表 -->
-    <div class="flex-1 overflow-y-auto">
+    <div ref="scrollContainer" class="flex-1 overflow-y-auto" @scroll="handleScroll">
       <div
         v-if="filteredEntries.length === 0"
         class="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400"
@@ -239,6 +239,21 @@
             </div>
           </div>
         </div>
+
+        <!-- 加载更多指示器 -->
+        <div
+          v-if="props.hasMore && !props.searchQuery"
+          class="flex items-center justify-center p-4"
+        >
+          <div
+            v-if="props.isLoading"
+            class="flex items-center space-x-2 text-gray-500 dark:text-gray-400"
+          >
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <span class="text-sm">加载中...</span>
+          </div>
+          <div v-else class="text-sm text-gray-400 dark:text-gray-500">滚动到底部加载更多</div>
+        </div>
       </div>
     </div>
 
@@ -316,12 +331,18 @@ interface Props {
   entries?: DecryptedPasswordEntry[]
   selectedEntryId?: number
   searchQuery?: string
+  totalCount?: number
+  hasMore?: boolean
+  isLoading?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   title: '密码列表',
   entries: () => [],
-  searchQuery: ''
+  searchQuery: '',
+  totalCount: 0,
+  hasMore: false,
+  isLoading: false
 })
 
 // 定义 emits
@@ -330,12 +351,14 @@ const emit = defineEmits<{
   'select-entry': [entry: DecryptedPasswordEntry]
   'edit-entry': [entry: DecryptedPasswordEntry]
   'delete-entry': [id: number]
+  'load-more': []
 }>()
 
 // 响应式数据
 const sortBy = ref<string>('updated_at')
 const showDeleteModal = ref(false)
 const entryToDelete = ref<DecryptedPasswordEntry | null>(null)
+const scrollContainer = ref<HTMLElement | null>(null)
 
 // 计算属性
 const filteredEntries = computed(() => {
@@ -433,6 +456,19 @@ const confirmDelete = (): void => {
   if (entryToDelete.value) {
     emit('delete-entry', entryToDelete.value.id)
     closeDeleteModal()
+  }
+}
+
+// 滚动处理函数
+const handleScroll = (): void => {
+  if (!scrollContainer.value || props.isLoading || !props.hasMore || props.searchQuery) {
+    return
+  }
+
+  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value
+  // 当滚动到距离底部 100px 时触发加载
+  if (scrollTop + clientHeight >= scrollHeight - 100) {
+    emit('load-more')
   }
 }
 </script>

@@ -28,7 +28,7 @@ export class DatabaseService implements DatabaseServiceInterface {
   private isDirty = false
   private autoSaveTimer: NodeJS.Timeout | null = null
   private autoSaveDelayMs: number = 3000 // debounce interval (ms)
-  private disableAutoSave: boolean = true // 禁用自动保存，采用纯内存方案
+  private disableAutoSave: boolean = false // 禁用自动保存，采用纯内存方案
   private isSaving: boolean = false
   // file-level encryption paths
   private plainDbPath: string | null = null
@@ -556,8 +556,12 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!createdTag) {
       throw new Error('创建标签后无法获取标签信息')
     }
-    // 标记为脏并安排自动保存
+
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保创建操作持久化
+    await this.forceFlush()
     return createdTag
   }
 
@@ -636,6 +640,48 @@ export class DatabaseService implements DatabaseServiceInterface {
   }
 
   /**
+   * 强制保存到磁盘，无视 disableAutoSave 设置
+   */
+  private async forceFlush(): Promise<void> {
+    if (!this.db) return
+    if (!this.encryptedDbPath || !this.encryptionKey) return
+
+    this.isSaving = true
+    try {
+      const serialized = this.db.serialize()
+
+      // close the db to ensure consistent serialization on disk
+      try {
+        this.db.close()
+      } catch {
+        // ignore
+      }
+      this.db = new Database(serialized, { verbose: console.log })
+
+      await CryptoService.encryptBufferToFile(
+        serialized,
+        this.encryptedDbPath!,
+        this.encryptionKey!
+      )
+      CryptoService.clearBuffer(serialized)
+      this.isDirty = false
+      console.log('强制保存完成：已将内存 DB 序列化并加密回磁盘')
+
+      // Notify renderer windows about save completion
+      try {
+        const payload = { timestamp: Date.now(), path: this.encryptedDbPath }
+        BrowserWindow.getAllWindows().forEach((w) => {
+          w.webContents.send('autosave:completed', payload)
+        })
+      } catch (e) {
+        console.warn('通知渲染进程 autosave:completed 失败:', e)
+      }
+    } finally {
+      this.isSaving = false
+    }
+  }
+
+  /**
    * 强制保存（同步语义：等待完成）
    */
   private async forceSave(): Promise<void> {
@@ -687,7 +733,11 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!updatedTag) {
       throw new Error('更新标签后无法获取标签信息')
     }
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保更新操作持久化
+    await this.forceFlush()
     return updatedTag
   }
 
@@ -702,7 +752,12 @@ export class DatabaseService implements DatabaseServiceInterface {
       table_name: 'tags',
       record_id: id
     })
+
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保删除操作持久化
+    await this.forceFlush()
   }
 
   async getAllTags(): Promise<Tag[]> {
@@ -795,8 +850,12 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!createdEntry) {
       throw new Error('创建密码条目后无法获取条目信息')
     }
-    // 标记为脏（需要保存）
+
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保创建操作持久化
+    await this.forceFlush()
     return createdEntry
   }
 
@@ -903,22 +962,48 @@ export class DatabaseService implements DatabaseServiceInterface {
     if (!updatedEntry) {
       throw new Error('更新密码条目后无法获取条目信息')
     }
+
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保更新操作持久化
+    await this.forceFlush()
     return updatedEntry
   }
 
   async deletePasswordEntry(id: number): Promise<void> {
     this.ensureInitialized()
+    this.ensureEncryptionKey()
 
-    const stmt = this.db!.prepare('DELETE FROM password_entries WHERE id = ?')
-    stmt.run(id)
+    const transaction = this.db!.transaction(() => {
+      // 删除密码条目（由于外键约束CASCADE，相关记录会自动删除）
+      const stmt = this.db!.prepare('DELETE FROM password_entries WHERE id = ?')
+      const result = stmt.run(id)
 
-    await this.logAction({
-      action: 'DELETE',
-      table_name: 'password_entries',
-      record_id: id
+      if (result.changes === 0) {
+        throw new Error(`未找到ID为${id}的密码条目`)
+      }
+
+      // 记录审计日志
+      const auditStmt = this.db!.prepare(`
+        INSERT INTO audit_logs (action, table_name, record_id, details)
+        VALUES (?, ?, ?, ?)
+      `)
+      auditStmt.run(
+        'DELETE',
+        'password_entries',
+        id,
+        JSON.stringify({ deleted_at: new Date().toISOString() })
+      )
     })
+
+    transaction()
+
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保删除操作持久化
+    await this.forceFlush()
   }
 
   async getPasswordEntryById(id: number): Promise<DecryptedPasswordEntry | null> {
@@ -1140,7 +1225,12 @@ export class DatabaseService implements DatabaseServiceInterface {
     `)
 
     stmt.run(key, value, description || null)
+
+    // 标记数据为脏
     this.markDirty()
+
+    // 立即保存到磁盘，确保设置更改持久化
+    await this.forceFlush()
   }
 
   async getAllSettings(): Promise<AppSetting[]> {
