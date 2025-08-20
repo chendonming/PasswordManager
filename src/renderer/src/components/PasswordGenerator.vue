@@ -16,7 +16,7 @@
               class="flex-1 px-3 py-2 border rounded-l-lg font-mono text-sm border-gray-300 bg-gray-50 text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
             />
             <button
-              class="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 active:bg-blue-800 active:scale-95 transition-all duration-150"
+              class="px-4 py-2 bg-blue-600 text-white rounded-r-lg hover:bg-blue-700 active:bg-blue-800 active:scale-95 transition-all duration-150 cursor-pointer"
               @click="copyPassword"
             >
               复制
@@ -46,7 +46,9 @@
               class="rounded text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
               @change="generatePassword"
             />
-            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300"> 包含大写字母 (A-Z) </span>
+            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+              包含大写字母 (A-Z)
+            </span>
           </label>
           <label class="flex items-center">
             <input
@@ -55,7 +57,9 @@
               class="rounded text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
               @change="generatePassword"
             />
-            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300"> 包含小写字母 (a-z) </span>
+            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+              包含小写字母 (a-z)
+            </span>
           </label>
           <label class="flex items-center">
             <input
@@ -64,7 +68,9 @@
               class="rounded text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
               @change="generatePassword"
             />
-            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300"> 包含数字 (0-9) </span>
+            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+              包含数字 (0-9)
+            </span>
           </label>
           <label class="flex items-center">
             <input
@@ -73,12 +79,14 @@
               class="rounded text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600"
               @change="generatePassword"
             />
-            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300"> 包含符号 (!@#$%^&*) </span>
+            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+              包含符号 (!@#$%^&*)
+            </span>
           </label>
         </div>
 
         <button
-          class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 active:scale-95 transition-all duration-150"
+          class="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800 active:scale-95 transition-all duration-150 cursor-pointer"
           @click="generatePassword"
         >
           生成新密码

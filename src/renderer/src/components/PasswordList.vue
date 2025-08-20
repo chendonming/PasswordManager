@@ -23,7 +23,7 @@
         <!-- 排序选择器 -->
         <select
           v-model="sortBy"
-          class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          class="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-transparent cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors duration-150"
         >
           <option value="updated_at">最近更新</option>
           <option value="title">标题</option>
@@ -179,7 +179,7 @@
               >
                 <button
                   title="复制用户名"
-                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 cursor-pointer hover:scale-105 active:scale-95"
                   @click.stop="copyToClipboard(entry.username || '')"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -194,7 +194,7 @@
 
                 <button
                   title="复制密码"
-                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 cursor-pointer hover:scale-105 active:scale-95"
                   @click.stop="copyToClipboard(entry.password)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,7 +209,7 @@
 
                 <button
                   title="编辑"
-                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
+                  class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200 cursor-pointer hover:scale-105 active:scale-95"
                   @click.stop="$emit('edit-entry', entry)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,7 +224,7 @@
 
                 <button
                   title="删除"
-                  class="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200"
+                  class="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200 cursor-pointer hover:scale-105 active:scale-95"
                   @click.stop="handleDelete(entry)"
                 >
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

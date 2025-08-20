@@ -32,10 +32,10 @@
           v-for="item in navigationItems"
           :key="item.id"
           :class="[
-            'w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors duration-200',
+            'w-full flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer',
             activeTab === item.id
-              ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
-              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+              ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 transform scale-105'
+              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hover:scale-105 active:scale-95'
           ]"
           @click="$emit('navigate', item.id)"
         >
@@ -59,7 +59,7 @@
             标签
           </h3>
           <button
-            class="w-5 h-5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200"
+            class="w-5 h-5 text-gray-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-200 cursor-pointer hover:scale-110 active:scale-95"
             title="添加标签"
             @click="$emit('add-tag')"
           >
@@ -77,7 +77,7 @@
           <button
             v-for="tag in tags"
             :key="tag.id"
-            class="w-full flex items-center space-x-2 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-200"
+            class="w-full flex items-center space-x-2 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
             @click="$emit('filter-by-tag', tag.id)"
           >
             <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
@@ -92,7 +92,7 @@
     <div class="p-4 border-t border-gray-200 dark:border-gray-700">
       <div class="space-y-2">
         <button
-          class="w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+          class="w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer hover:scale-105 active:scale-95"
           @click="$emit('sync')"
         >
           <svg
@@ -112,7 +112,7 @@
         </button>
 
         <button
-          class="w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-colors duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+          class="w-full flex items-center space-x-3 px-3 py-2 text-sm rounded-lg transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer hover:scale-105 active:scale-95"
           @click="$emit('settings')"
         >
           <svg

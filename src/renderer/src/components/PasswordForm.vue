@@ -44,7 +44,7 @@
           <button
             type="button"
             title="显示/隐藏密码"
-            class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-all duration-150 cursor-pointer"
             @click="showPassword = !showPassword"
           >
             <svg
@@ -79,7 +79,7 @@
           <button
             type="button"
             title="生成密码"
-            class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            class="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-all duration-150 cursor-pointer"
             @click="generatePassword"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,7 +142,7 @@
           {{ tag.name }}
           <button
             type="button"
-            class="ml-1.5 text-current hover:text-red-600 transition-colors"
+            class="ml-1.5 text-current hover:text-red-600 transition-all duration-150 cursor-pointer hover:scale-110 active:scale-95"
             @click="removeTag(tag)"
           >
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,7 +180,7 @@
               <div
                 v-for="tag in filteredAvailableTags"
                 :key="tag.id"
-                class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm transition-colors border-l-2 border-transparent hover:border-blue-500 flex items-center space-x-2"
+                class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm transition-all duration-150 border-l-2 border-transparent hover:border-blue-500 flex items-center space-x-2 hover:scale-105 active:scale-95"
                 @click="addTag(tag)"
               >
                 <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
@@ -201,7 +201,7 @@
                     (t) => t.name.toLowerCase() === tagSearchQuery.toLowerCase()
                   )
                 "
-                class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer text-sm transition-colors border-l-2 border-transparent hover:border-blue-500 flex items-center space-x-2 text-blue-600 dark:text-blue-400"
+                class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer text-sm transition-all duration-150 border-l-2 border-transparent hover:border-blue-500 flex items-center space-x-2 text-blue-600 dark:text-blue-400 hover:scale-105 active:scale-95"
                 @click="createAndAddTag"
               >
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,7 +220,7 @@
           <button
             type="button"
             title="管理标签"
-            class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
+            class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-150 text-gray-600 dark:text-gray-400 cursor-pointer hover:scale-105 active:scale-95"
             @click="$emit('manage-tags')"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -244,7 +244,10 @@
         type="checkbox"
         class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
       />
-      <label for="is_favorite" class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label
+        for="is_favorite"
+        class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer"
+      >
         设为收藏
       </label>
     </div>

@@ -61,7 +61,7 @@
         />
         <!-- 搜索帮助按钮 -->
         <button
-          class="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          class="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer hover:scale-110 active:scale-95 transition-all duration-150"
           title="搜索帮助"
           @click="toggleSearchHelp"
         >
@@ -114,7 +114,7 @@
     <div class="flex items-center space-x-1 no-drag">
       <!-- 主题切换按钮 -->
       <button
-        class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-gray-200 dark:hover:bg-gray-700"
+        class="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer hover:scale-110 active:scale-95"
         title="切换主题"
         @click="$emit('toggle-theme')"
       >
@@ -141,7 +141,7 @@
       </button>
 
       <button
-        class="w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors duration-200"
+        class="w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-110 active:scale-95"
         title="最小化"
         @click="minimizeWindow"
       >
@@ -156,7 +156,7 @@
       </button>
 
       <button
-        class="w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-colors duration-200"
+        class="w-8 h-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-110 active:scale-95"
         title="最大化"
         @click="maximizeWindow"
       >
@@ -176,7 +176,7 @@
       </button>
 
       <button
-        class="w-8 h-8 rounded-lg hover:bg-red-500 hover:text-white flex items-center justify-center transition-all duration-200"
+        class="w-8 h-8 rounded-lg hover:bg-red-500 hover:text-white flex items-center justify-center transition-all duration-200 cursor-pointer hover:scale-110 active:scale-95"
         title="关闭"
         @click="closeWindow"
       >

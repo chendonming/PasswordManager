@@ -44,7 +44,7 @@
         </svg>
         <p class="text-gray-500 dark:text-gray-400 mb-4">还没有标签</p>
         <button
-          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 active:scale-95 transition-all duration-150 text-sm cursor-pointer"
           @click="showCreateModal = true"
         >
           创建第一个标签
@@ -55,7 +55,7 @@
         <div
           v-for="tag in tags"
           :key="tag.id"
-          class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow group"
+          class="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group cursor-pointer"
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center space-x-3 flex-1 min-w-0">
@@ -78,7 +78,7 @@
             >
               <button
                 title="编辑标签"
-                class="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
+                class="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-all duration-150 cursor-pointer"
                 @click="editTag(tag)"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -92,7 +92,7 @@
               </button>
               <button
                 title="删除标签"
-                class="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400"
+                class="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all duration-150 cursor-pointer"
                 @click="deleteTag(tag)"
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -141,7 +141,7 @@
             <input
               v-model="tagForm.color"
               type="color"
-              class="w-10 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+              class="w-10 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors duration-150"
             />
             <input
               v-model="tagForm.color"

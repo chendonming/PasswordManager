@@ -49,7 +49,7 @@
 
               <button
                 v-if="showClose"
-                class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer hover:scale-110 active:scale-95"
                 @click="$emit('close')"
               >
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

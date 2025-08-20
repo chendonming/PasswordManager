@@ -14,7 +14,7 @@
     >
       <button
         :class="[
-          'px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-150',
+          'px-3 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 cursor-pointer active:scale-95',
           activeMenu === menu.id ? 'bg-gray-100 dark:bg-gray-700' : ''
         ]"
         @click="toggleMenu(menu.id)"
@@ -43,7 +43,7 @@
             <div v-else-if="item.type === 'submenu'" class="relative group">
               <button
                 :class="[
-                  'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between',
+                  'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between transition-all duration-150 cursor-pointer',
                   item.disabled ? 'text-gray-400 cursor-not-allowed' : ''
                 ]"
                 :disabled="item.disabled"
@@ -82,9 +82,11 @@
                     <button
                       v-else
                       :class="[
-                        'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2',
+                        'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 transition-all duration-150 cursor-pointer active:scale-95',
                         subItem.disabled ? 'text-gray-400 cursor-not-allowed' : '',
-                        subItem.dangerous ? 'text-red-600 dark:text-red-400' : ''
+                        subItem.dangerous
+                          ? 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+                          : ''
                       ]"
                       :disabled="subItem.disabled"
                       @click="handleMenuAction(subItem)"
@@ -121,7 +123,7 @@
             <button
               v-else
               :class="[
-                'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2',
+                'w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2 transition-all duration-150 cursor-pointer active:scale-95',
                 item.disabled ? 'text-gray-400 cursor-not-allowed' : ''
               ]"
               :disabled="item.disabled"
