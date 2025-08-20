@@ -111,76 +111,75 @@
     </div>
 
     <!-- 创建/编辑标签模态框 -->
-    <Modal :visible="showCreateModal || showEditModal" @close="closeModal">
-      <template #title>
-        {{ editingTag ? '编辑标签' : '创建标签' }}
-      </template>
-      <template #content>
-        <form class="space-y-4" @submit.prevent="saveTag">
-          <!-- 标签名称 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              标签名称 *
-            </label>
+    <Modal
+      :visible="showCreateModal || showEditModal"
+      :title="editingTag ? '编辑标签' : '创建标签'"
+      @close="closeModal"
+    >
+      <form class="space-y-4" @submit.prevent="saveTag">
+        <!-- 标签名称 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            标签名称 *
+          </label>
+          <input
+            v-model="tagForm.name"
+            type="text"
+            required
+            maxlength="50"
+            placeholder="例如：工作、个人、重要"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <!-- 标签颜色 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            标签颜色
+          </label>
+          <div class="flex items-center space-x-2">
             <input
-              v-model="tagForm.name"
+              v-model="tagForm.color"
+              type="color"
+              class="w-10 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
+            />
+            <input
+              v-model="tagForm.color"
               type="text"
-              required
-              maxlength="50"
-              placeholder="例如：工作、个人、重要"
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="#18a058"
+              class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+        </div>
 
-          <!-- 标签颜色 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              标签颜色
-            </label>
-            <div class="flex items-center space-x-2">
-              <input
-                v-model="tagForm.color"
-                type="color"
-                class="w-10 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
-              />
-              <input
-                v-model="tagForm.color"
-                type="text"
-                placeholder="#18a058"
-                class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          </div>
+        <!-- 标签描述 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            描述（可选）
+          </label>
+          <textarea
+            v-model="tagForm.description"
+            rows="3"
+            maxlength="200"
+            placeholder="为这个标签添加描述..."
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+          ></textarea>
+        </div>
 
-          <!-- 标签描述 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              描述（可选）
-            </label>
-            <textarea
-              v-model="tagForm.description"
-              rows="3"
-              maxlength="200"
-              placeholder="为这个标签添加描述..."
-              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            ></textarea>
+        <!-- 预览 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            预览
+          </label>
+          <div class="flex items-center space-x-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+            <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tagForm.color }"></div>
+            <span class="text-sm font-medium text-gray-900 dark:text-white">
+              {{ tagForm.name || '标签名称' }}
+            </span>
           </div>
-
-          <!-- 预览 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              预览
-            </label>
-            <div class="flex items-center space-x-2 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tagForm.color }"></div>
-              <span class="text-sm font-medium text-gray-900 dark:text-white">
-                {{ tagForm.name || '标签名称' }}
-              </span>
-            </div>
-          </div>
-        </form>
-      </template>
-      <template #actions>
+        </div>
+      </form>
+      <template #footer>
         <button
           type="button"
           class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors mr-2"
@@ -204,17 +203,14 @@
     </Modal>
 
     <!-- 删除确认模态框 -->
-    <Modal :visible="showDeleteModal" @close="showDeleteModal = false">
-      <template #title>删除标签</template>
-      <template #content>
-        <p class="text-gray-700 dark:text-gray-300">
-          确定要删除标签 <strong>{{ deletingTag?.name }}</strong> 吗？
-        </p>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
-          此操作无法撤销，但不会影响已使用此标签的密码条目。
-        </p>
-      </template>
-      <template #actions>
+    <Modal :visible="showDeleteModal" title="删除标签" @close="showDeleteModal = false">
+      <p class="text-gray-700 dark:text-gray-300">
+        确定要删除标签 <strong>{{ deletingTag?.name }}</strong> 吗？
+      </p>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">
+        此操作无法撤销，但不会影响已使用此标签的密码条目。
+      </p>
+      <template #footer>
         <button
           type="button"
           class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors mr-2"
