@@ -287,7 +287,6 @@ const deletingTag = ref<Tag | null>(null)
 const loadTags = async (): Promise<void> => {
   try {
     isLoading.value = true
-    //@ts-expect-error window.api injected by preload
     const result = await window.api.getAllTags()
     if (Array.isArray(result)) {
       tags.value = result
@@ -307,7 +306,6 @@ const loadTags = async (): Promise<void> => {
 const createTag = async (): Promise<void> => {
   try {
     isSaving.value = true
-    //@ts-expect-error window.api injected by preload
     const result = await window.api.createTag({
       name: tagForm.value.name.trim(),
       color: tagForm.value.color,
@@ -334,7 +332,6 @@ const updateTag = async (): Promise<void> => {
 
   try {
     isSaving.value = true
-    //@ts-expect-error window.api injected by preload
     const result = await window.api.updateTag(editingTag.value.id, {
       name: tagForm.value.name.trim(),
       color: tagForm.value.color,
@@ -364,17 +361,12 @@ const confirmDelete = async (): Promise<void> => {
 
   try {
     isSaving.value = true
-    //@ts-expect-error window.api injected by preload
-    const result = await window.api.deleteTagById(deletingTag.value.id)
-
-    if (result && result.success !== false) {
-      tags.value = tags.value.filter((t) => t.id !== deletingTag.value!.id)
-      emit('tagsUpdated')
-      showDeleteModal.value = false
-      deletingTag.value = null
-    } else {
-      console.error('删除标签失败:', result)
-    }
+    await window.api.deleteTagById(deletingTag.value.id)
+    // deleteTagById doesn't return a result per PreloadAPI; assume success if no exception
+    tags.value = tags.value.filter((t) => t.id !== deletingTag.value!.id)
+    emit('tagsUpdated')
+    showDeleteModal.value = false
+    deletingTag.value = null
   } catch (error) {
     console.error('删除标签失败:', error)
   } finally {

@@ -6,7 +6,7 @@ import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
 import { ImportManager } from './services/ImportManager'
-import { ExportManager } from './services/ExportManager'
+// ExportManager removed because it's not used in this manager file
 import { ChromeCsvImporter } from './services/importers/ChromeCsvImporter'
 import { DecryptedPasswordEntry } from '../common/types/database'
 
@@ -18,14 +18,12 @@ export class MainProcessManager {
   private dbService: DatabaseService
   private initializer: DatabaseInitializer
   private importManager: ImportManager
-  private exportManager: ExportManager
   private isAuthenticated = false
 
   constructor() {
     this.dbService = new DatabaseService()
     this.initializer = new DatabaseInitializer(this.dbService)
     this.importManager = new ImportManager()
-    this.exportManager = new ExportManager()
     this.setupIpcHandlers()
     this.initializeImportExportServices()
   }

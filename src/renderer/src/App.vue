@@ -180,6 +180,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+
+// derive local types from global PreloadAPI to avoid importing from other tsconfigs
+type SearchResultLocal = Awaited<ReturnType<Window['api']['searchPasswordEntries']>>
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import PasswordList from './components/PasswordList.vue'
@@ -190,44 +193,7 @@ import AuthenticationView from './components/AuthenticationView.vue'
 import PasswordGenerator from './components/PasswordGenerator.vue'
 import WelcomeView from './components/WelcomeView.vue'
 
-// API类型声明
-declare global {
-  interface Window {
-    api: {
-      invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
-      searchPasswordEntries: (params: {
-        page?: number
-        pageSize?: number
-        query?: string
-      }) => Promise<{
-        entries: DecryptedPasswordEntry[]
-        total: number
-        page: number
-        pageSize: number
-      }>
-      createPasswordEntry: (data: {
-        title: string
-        username?: string
-        password: string
-        url?: string
-        description?: string
-        is_favorite?: boolean
-      }) => Promise<DecryptedPasswordEntry>
-      updatePasswordEntry: (
-        id: number,
-        data: {
-          title?: string
-          username?: string
-          password?: string
-          url?: string
-          description?: string
-          is_favorite?: boolean
-        }
-      ) => Promise<DecryptedPasswordEntry>
-      deletePasswordEntry: (id: number) => Promise<void>
-    }
-  }
-}
+// Use shared global types declared in `src/preload/index.d.ts` and `src/common/types/database.d.ts`
 
 // 定义密码条目类型
 interface Tag {
@@ -323,7 +289,6 @@ const toggleTheme = async (): Promise<void> => {
 
   // 通知主进程更新窗口背景色
   try {
-    //@ts-expect-error window.api injected by preload
     await window.api.setThemeBackground(isDarkMode.value)
     console.log('主题切换到:', isDarkMode.value ? '深色' : '浅色', '，主进程背景已更新')
   } catch (error) {
@@ -360,7 +325,6 @@ onMounted(async () => {
 
   // 同步初始主题到主进程
   try {
-    //@ts-expect-error window.api injected by preload
     await window.api.setThemeBackground(isDarkMode.value)
     console.log('初始主题已同步到主进程:', isDarkMode.value ? '深色' : '浅色')
   } catch (error) {
@@ -413,8 +377,6 @@ const checkAuthStatus = async (): Promise<void> => {
     isAuthenticated.value = false
   }
 }
-
-// 检查数据库状态（已集成到checkAuthStatus中）
 
 // 主密码提交处理
 const handleAuthenticate = async (data: {
@@ -499,12 +461,11 @@ const loadPasswords = async (reset: boolean = false): Promise<void> => {
 
     // 只在第一次加载时获取标签
     if (reset || allTags.value.length === 0) {
-      //@ts-expect-error window.api injected by preload
       promises.push(window.api.getAllTags())
     }
 
     const results = await Promise.all(promises)
-    const passwordResult = results[0] as any
+    const passwordResult = results[0] as SearchResultLocal
 
     if (reset) {
       passwords.value = passwordResult.entries
@@ -542,7 +503,6 @@ const loadPasswords = async (reset: boolean = false): Promise<void> => {
 // 刷新标签数据
 const refreshTags = async (): Promise<void> => {
   try {
-    //@ts-expect-error window.api injected by preload
     allTags.value = await window.api.getAllTags()
   } catch (error) {
     console.error('刷新标签失败:', error)
@@ -560,7 +520,6 @@ const loadMorePasswords = async (): Promise<void> => {
 // 加载统计信息
 const loadStatistics = async (): Promise<void> => {
   try {
-    //@ts-expect-error window.api injected by preload
     const stats = await window.api.getStatistics()
     statistics.value = stats
     console.log('统计信息加载成功:', stats)
@@ -659,7 +618,7 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
         description: data.description,
         is_favorite: data.is_favorite,
         tag_ids: tagIds
-      } as any)
+      })
 
       // 在本地数组中更新
       const index = passwords.value.findIndex((p) => p.id === editingEntry.value!.id)
@@ -686,7 +645,7 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
         description: data.description,
         is_favorite: data.is_favorite,
         tag_ids: tagIds
-      } as any)
+      })
 
       // 添加到本地数组中
       passwords.value.push(newPassword)
@@ -783,7 +742,6 @@ const handleChromeImport = async (): Promise<void> => {
     console.log('开始Chrome CSV导入流程...')
 
     // 使用文件选择对话框让用户选择CSV文件
-    //@ts-expect-error window.api injected by preload
     const fileResult = await window.api.selectImportFile('chrome')
 
     if (!fileResult.success || !fileResult.data?.filePath) {
@@ -804,8 +762,9 @@ const handleChromeImport = async (): Promise<void> => {
 
     // 先预览导入数据
     console.log('开始预览导入数据...')
-    //@ts-expect-error window.api injected by preload
-    const previewResult = await window.api.importPreview(importConfig)
+    const previewResult = await window.api.importPreview(
+      importConfig as Parameters<Window['api']['importPreview']>[0]
+    )
 
     if (!previewResult.success) {
       console.error('预览导入失败:', previewResult.message)
@@ -828,8 +787,9 @@ const handleChromeImport = async (): Promise<void> => {
 
     // 执行导入
     console.log('开始执行导入...')
-    //@ts-expect-error window.api injected by preload
-    const importResult = await window.api.importExecute(importConfig)
+    const importResult = await window.api.importExecute(
+      importConfig as Parameters<Window['api']['importExecute']>[0]
+    )
 
     if (importResult.success) {
       console.log('导入成功:', importResult.data)

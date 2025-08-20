@@ -418,7 +418,6 @@ const createAndAddTag = async (): Promise<void> => {
   if (!newTagName) return
 
   try {
-    //@ts-expect-error window.api injected by preload
     const newTag = await window.api.createTag({
       name: newTagName,
       color: '#18a058'
