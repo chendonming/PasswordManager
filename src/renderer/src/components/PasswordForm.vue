@@ -315,6 +315,9 @@ const tagSearchQuery = ref('')
 const showTagDropdown = ref(false)
 const allTags = ref<Tag[]>(props.availableTags || [])
 
+// 跟踪用户是否正在进行标签操作
+const isUserInteracting = ref(false)
+
 // 计算属性
 const filteredAvailableTags = computed(() => {
   const query = tagSearchQuery.value.toLowerCase()
@@ -331,9 +334,26 @@ const filteredAvailableTags = computed(() => {
 })
 
 // 监听initialData变化以支持编辑模式
+// 使用深度比较避免不必要的重置
+let lastInitialDataString = ''
+
 watch(
   () => props.initialData,
   (newData) => {
+    const newDataString = JSON.stringify(newData)
+
+    // 如果数据内容没有真正变化，不重置表单
+    if (newDataString === lastInitialDataString) {
+      return
+    }
+
+    // 如果用户正在进行标签操作，不重置表单
+    if (isUserInteracting.value) {
+      return
+    }
+
+    lastInitialDataString = newDataString
+
     if (newData) {
       form.value = {
         title: newData.title || '',
@@ -344,7 +364,7 @@ watch(
         is_favorite: newData.is_favorite || false,
         tags: newData.tags || []
       }
-      selectedTags.value = newData.tags || []
+      selectedTags.value = [...(newData.tags || [])]
     } else {
       // 重置表单
       form.value = {
@@ -372,6 +392,7 @@ watch(
 )
 
 // 监听selectedTags变化并同步到form.tags
+// 只更新tags字段，不影响其他字段
 watch(
   selectedTags,
   (newTags) => {
@@ -405,20 +426,32 @@ const passwordStrength = computed(() => {
 
 // 标签相关方法
 const addTag = (tag: Tag): void => {
+  isUserInteracting.value = true
   if (!selectedTags.value.find((t) => t.id === tag.id)) {
     selectedTags.value.push(tag)
   }
   tagSearchQuery.value = ''
   showTagDropdown.value = false
+  // 短暂延迟后重置交互标记
+  setTimeout(() => {
+    isUserInteracting.value = false
+  }, 100)
 }
 
 const removeTag = (tag: Tag): void => {
+  isUserInteracting.value = true
   selectedTags.value = selectedTags.value.filter((t) => t.id !== tag.id)
+  // 短暂延迟后重置交互标记
+  setTimeout(() => {
+    isUserInteracting.value = false
+  }, 100)
 }
 
 const createAndAddTag = async (): Promise<void> => {
   const newTagName = tagSearchQuery.value.trim()
   if (!newTagName) return
+
+  isUserInteracting.value = true
 
   try {
     const newTag = await window.api.createTag({
@@ -432,6 +465,11 @@ const createAndAddTag = async (): Promise<void> => {
     }
   } catch (error) {
     console.error('创建标签失败:', error)
+  } finally {
+    // 延迟重置交互标记
+    setTimeout(() => {
+      isUserInteracting.value = false
+    }, 100)
   }
 }
 

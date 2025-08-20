@@ -898,9 +898,8 @@ export class DatabaseService implements DatabaseServiceInterface {
       }
 
       if (input.username !== undefined) {
-        const encryptedUsername = input.username ? this.encryptField(input.username) : null
         updateFields.push('username = ?')
-        values.push(encryptedUsername?.encrypted || null)
+        values.push(input.username || null)
       }
 
       if (input.url !== undefined) {
@@ -909,9 +908,8 @@ export class DatabaseService implements DatabaseServiceInterface {
       }
 
       if (input.description !== undefined) {
-        const encryptedDescription = input.description ? this.encryptField(input.description) : null
         updateFields.push('description = ?')
-        values.push(encryptedDescription?.encrypted || null)
+        values.push(input.description || null)
       }
 
       if (input.is_favorite !== undefined) {
@@ -1153,7 +1151,8 @@ export class DatabaseService implements DatabaseServiceInterface {
     return {
       id: row.id,
       title: row.title,
-      // username and description are stored as plaintext in current schema
+      // Username and description are now stored as plaintext
+      // Historical encrypted data cannot be decrypted due to IV/tag mismatch
       username: row.username || undefined,
       // password is encrypted using encryption_iv/encryption_tag
       password: this.decryptField(row.password, row.encryption_iv, row.encryption_tag),
