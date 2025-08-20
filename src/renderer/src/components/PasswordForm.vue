@@ -123,6 +123,119 @@
       ></textarea>
     </div>
 
+    <!-- 标签 -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"> 标签 </label>
+
+      <!-- 已选标签显示 -->
+      <div v-if="selectedTags.length > 0" class="flex flex-wrap gap-2 mb-3">
+        <span
+          v-for="tag in selectedTags"
+          :key="tag.id"
+          class="inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-medium"
+          :style="{
+            backgroundColor: tag.color + '20',
+            color: tag.color,
+            border: `1px solid ${tag.color}30`
+          }"
+        >
+          {{ tag.name }}
+          <button
+            type="button"
+            class="ml-1.5 text-current hover:text-red-600 transition-colors"
+            @click="removeTag(tag)"
+          >
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </span>
+      </div>
+
+      <!-- 标签选择器 -->
+      <div class="relative">
+        <div class="flex items-center space-x-2">
+          <div class="relative flex-1">
+            <input
+              v-model="tagSearchQuery"
+              type="text"
+              placeholder="搜索或输入新标签名称..."
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              @focus="showTagDropdown = true"
+              @blur="hideTagDropdown"
+              @keydown.enter.prevent="handleTagEnter"
+            />
+
+            <!-- 标签下拉列表 -->
+            <div
+              v-if="showTagDropdown && (filteredAvailableTags.length > 0 || tagSearchQuery.trim())"
+              class="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 max-h-40 overflow-y-auto"
+            >
+              <!-- 可选择的现有标签 -->
+              <div
+                v-for="tag in filteredAvailableTags"
+                :key="tag.id"
+                class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm transition-colors border-l-2 border-transparent hover:border-blue-500 flex items-center space-x-2"
+                @click="addTag(tag)"
+              >
+                <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
+                <span class="text-gray-900 dark:text-white">{{ tag.name }}</span>
+                <span
+                  v-if="tag.description"
+                  class="text-xs text-gray-500 dark:text-gray-400 truncate"
+                >
+                  - {{ tag.description }}
+                </span>
+              </div>
+
+              <!-- 创建新标签选项 -->
+              <div
+                v-if="
+                  tagSearchQuery.trim() &&
+                  !filteredAvailableTags.some(
+                    (t) => t.name.toLowerCase() === tagSearchQuery.toLowerCase()
+                  )
+                "
+                class="px-3 py-2 hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer text-sm transition-colors border-l-2 border-transparent hover:border-blue-500 flex items-center space-x-2 text-blue-600 dark:text-blue-400"
+                @click="createAndAddTag"
+              >
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+                  />
+                </svg>
+                <span>创建新标签 "{{ tagSearchQuery.trim() }}"</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            title="管理标签"
+            class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-gray-600 dark:text-gray-400"
+            @click="$emit('manage-tags')"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 收藏 -->
     <div class="flex items-center">
       <input
@@ -142,6 +255,13 @@
 import { ref, computed, watch } from 'vue'
 import PasswordStrengthIndicator from './PasswordStrengthIndicator.vue'
 
+interface Tag {
+  id: number
+  name: string
+  color: string
+  description?: string
+}
+
 interface PasswordForm {
   title: string
   username: string
@@ -149,6 +269,7 @@ interface PasswordForm {
   url: string
   description: string
   is_favorite: boolean
+  tags: Tag[]
 }
 
 interface Props {
@@ -159,15 +280,19 @@ interface Props {
     url?: string
     description?: string
     is_favorite?: boolean
+    tags?: Tag[]
   } | null
+  availableTags?: Tag[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  initialData: null
+  initialData: null,
+  availableTags: () => []
 })
 
 const emit = defineEmits<{
   submit: [data: PasswordForm]
+  'manage-tags': []
 }>()
 
 // 表单数据
@@ -177,7 +302,29 @@ const form = ref<PasswordForm>({
   password: props.initialData?.password || '',
   url: props.initialData?.url || '',
   description: props.initialData?.description || '',
-  is_favorite: props.initialData?.is_favorite || false
+  is_favorite: props.initialData?.is_favorite || false,
+  tags: props.initialData?.tags || []
+})
+
+// 标签相关状态
+const selectedTags = ref<Tag[]>(props.initialData?.tags || [])
+const tagSearchQuery = ref('')
+const showTagDropdown = ref(false)
+const allTags = ref<Tag[]>(props.availableTags || [])
+
+// 计算属性
+const filteredAvailableTags = computed(() => {
+  const query = tagSearchQuery.value.toLowerCase()
+  const selectedTagIds = new Set(selectedTags.value.map((tag) => tag.id))
+
+  return allTags.value
+    .filter((tag) => !selectedTagIds.has(tag.id))
+    .filter(
+      (tag) =>
+        query === '' ||
+        tag.name.toLowerCase().includes(query) ||
+        (tag.description && tag.description.toLowerCase().includes(query))
+    )
 })
 
 // 监听initialData变化以支持编辑模式
@@ -191,8 +338,10 @@ watch(
         password: newData.password || '',
         url: newData.url || '',
         description: newData.description || '',
-        is_favorite: newData.is_favorite || false
+        is_favorite: newData.is_favorite || false,
+        tags: newData.tags || []
       }
+      selectedTags.value = newData.tags || []
     } else {
       // 重置表单
       form.value = {
@@ -201,11 +350,31 @@ watch(
         password: '',
         url: '',
         description: '',
-        is_favorite: false
+        is_favorite: false,
+        tags: []
       }
+      selectedTags.value = []
     }
   },
   { immediate: true }
+)
+
+// 监听availableTags变化
+watch(
+  () => props.availableTags,
+  (newTags) => {
+    allTags.value = newTags || []
+  },
+  { immediate: true }
+)
+
+// 监听selectedTags变化并同步到form.tags
+watch(
+  selectedTags,
+  (newTags) => {
+    form.value.tags = [...newTags]
+  },
+  { deep: true }
 )
 
 // 显示密码状态
@@ -230,6 +399,53 @@ const passwordStrength = computed(() => {
 
   return Math.min(score, 100)
 })
+
+// 标签相关方法
+const addTag = (tag: Tag): void => {
+  if (!selectedTags.value.find((t) => t.id === tag.id)) {
+    selectedTags.value.push(tag)
+  }
+  tagSearchQuery.value = ''
+  showTagDropdown.value = false
+}
+
+const removeTag = (tag: Tag): void => {
+  selectedTags.value = selectedTags.value.filter((t) => t.id !== tag.id)
+}
+
+const createAndAddTag = async (): Promise<void> => {
+  const newTagName = tagSearchQuery.value.trim()
+  if (!newTagName) return
+
+  try {
+    //@ts-expect-error window.api injected by preload
+    const newTag = await window.api.createTag({
+      name: newTagName,
+      color: '#18a058'
+    })
+
+    if (newTag && newTag.id) {
+      allTags.value.push(newTag)
+      addTag(newTag)
+    }
+  } catch (error) {
+    console.error('创建标签失败:', error)
+  }
+}
+
+const handleTagEnter = (): void => {
+  if (filteredAvailableTags.value.length > 0) {
+    addTag(filteredAvailableTags.value[0])
+  } else if (tagSearchQuery.value.trim()) {
+    createAndAddTag()
+  }
+}
+
+const hideTagDropdown = (): void => {
+  setTimeout(() => {
+    showTagDropdown.value = false
+  }, 200) // 延迟隐藏，允许点击下拉列表
+}
 
 // 生成密码
 const generatePassword = (): void => {
@@ -258,8 +474,10 @@ const resetForm = (): void => {
     url: '',
     description: '',
     is_favorite: false,
-    ...props.initialData
+    tags: []
   }
+  selectedTags.value = []
+  tagSearchQuery.value = ''
 }
 
 // 暴露方法给父组件

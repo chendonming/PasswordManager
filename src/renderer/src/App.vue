@@ -17,9 +17,12 @@
       <Sidebar
         :active-tab="activeTab"
         :user-info="{ username: '用户', passwordCount: statistics.totalEntries }"
+        :tags="tagsWithCount"
         @navigate="handleNavigate"
         @sync="handleSync"
         @settings="handleSettings"
+        @filter-by-tag="handleFilterByTag"
+        @add-tag="showTagManager = true"
       />
 
       <!-- 主内容区 -->
@@ -145,7 +148,9 @@
       <PasswordForm
         ref="passwordFormRef"
         :initial-data="editingEntry"
+        :available-tags="allTags"
         @submit="handlePasswordSubmit"
+        @manage-tags="showTagManager = true"
       />
 
       <template #footer>
@@ -165,6 +170,11 @@
         </button>
       </template>
     </Modal>
+
+    <!-- 标签管理模态框 -->
+    <Modal :visible="showTagManager" title="标签管理" size="lg" @close="showTagManager = false">
+      <TagManager @tags-updated="refreshTags" />
+    </Modal>
   </div>
 </template>
 
@@ -174,6 +184,7 @@ import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import PasswordList from './components/PasswordList.vue'
 import PasswordForm from './components/PasswordForm.vue'
+import TagManager from './components/TagManager.vue'
 import Modal from './components/Modal.vue'
 import AuthenticationView from './components/AuthenticationView.vue'
 import PasswordGenerator from './components/PasswordGenerator.vue'
@@ -248,6 +259,7 @@ interface PasswordFormData {
   url: string
   description: string
   is_favorite: boolean
+  tags: Tag[]
 }
 
 // 响应式数据
@@ -255,6 +267,7 @@ const activeTab = ref('all')
 const searchQuery = ref('')
 const selectedEntryId = ref<number | undefined>(undefined)
 const showPasswordModal = ref(false)
+const showTagManager = ref(false)
 const passwordFormRef = ref<InstanceType<typeof PasswordForm> | null>(null)
 const authViewRef = ref<InstanceType<typeof AuthenticationView> | null>(null)
 
@@ -274,6 +287,19 @@ const displayedPasswords = computed(() => {
   return isSearchMode.value ? searchResults.value : passwords.value
 })
 
+// 带计数的标签数据
+const tagsWithCount = computed(() => {
+  return allTags.value.map((tag) => {
+    const count = displayedPasswords.value.filter((password) =>
+      password.tags?.some((passwordTag) => passwordTag.id === tag.id)
+    ).length
+    return {
+      ...tag,
+      count
+    }
+  })
+})
+
 // 统计信息
 const statistics = ref({
   totalEntries: 0,
@@ -281,6 +307,9 @@ const statistics = ref({
   favoriteEntries: 0,
   recentlyUsed: 0
 })
+
+// 标签数据
+const allTags = ref<Tag[]>([])
 
 // 主题管理
 const isDarkMode = ref(false)
@@ -460,27 +489,44 @@ const loadPasswords = async (reset: boolean = false): Promise<void> => {
     }
     error.value = null
 
-    // 使用搜索API获取密码
-    const result = await window.api.searchPasswordEntries({
-      page: currentPage.value,
-      pageSize: pageSize.value
-    })
+    // 并行加载密码和标签
+    const promises: Promise<unknown>[] = [
+      window.api.searchPasswordEntries({
+        page: currentPage.value,
+        pageSize: pageSize.value
+      })
+    ]
+
+    // 只在第一次加载时获取标签
+    if (reset || allTags.value.length === 0) {
+      //@ts-expect-error window.api injected by preload
+      promises.push(window.api.getAllTags())
+    }
+
+    const results = await Promise.all(promises)
+    const passwordResult = results[0] as any
 
     if (reset) {
-      passwords.value = result.entries
+      passwords.value = passwordResult.entries
     } else {
-      passwords.value = [...passwords.value, ...result.entries]
+      passwords.value = [...passwords.value, ...passwordResult.entries]
+    }
+
+    // 更新标签数据
+    if (results.length > 1) {
+      allTags.value = results[1] as Tag[]
     }
 
     // 更新分页状态
     hasMore.value =
-      result.entries.length === pageSize.value && passwords.value.length < result.total
+      passwordResult.entries.length === pageSize.value &&
+      passwords.value.length < passwordResult.total
 
     console.log(
       '密码数据加载成功，当前页:',
       currentPage.value,
       '本页条数:',
-      result.entries.length,
+      passwordResult.entries.length,
       '总条数:',
       passwords.value.length
     )
@@ -490,6 +536,16 @@ const loadPasswords = async (reset: boolean = false): Promise<void> => {
   } finally {
     isLoading.value = false
     isLoadingMore.value = false
+  }
+}
+
+// 刷新标签数据
+const refreshTags = async (): Promise<void> => {
+  try {
+    //@ts-expect-error window.api injected by preload
+    allTags.value = await window.api.getAllTags()
+  } catch (error) {
+    console.error('刷新标签失败:', error)
   }
 }
 
@@ -533,6 +589,14 @@ const handleSync = (): void => {
 
 const handleSettings = (): void => {
   console.log('打开设置')
+}
+
+const handleFilterByTag = (tagId: number): void => {
+  const tag = allTags.value.find((t) => t.id === tagId)
+  if (tag) {
+    searchQuery.value = `tag:${tag.name}`
+    handleSearch(searchQuery.value)
+  }
 }
 
 const handleSearch = async (query: string): Promise<void> => {
@@ -582,6 +646,9 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
   try {
     console.log('提交密码数据:', data)
 
+    // 提取tag IDs
+    const tagIds = data.tags.map((tag) => tag.id)
+
     if (editingEntry.value) {
       // 编辑模式：更新现有密码
       const updatedPassword = await window.api.updatePasswordEntry(editingEntry.value.id, {
@@ -590,8 +657,9 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
         password: data.password,
         url: data.url,
         description: data.description,
-        is_favorite: data.is_favorite
-      })
+        is_favorite: data.is_favorite,
+        tag_ids: tagIds
+      } as any)
 
       // 在本地数组中更新
       const index = passwords.value.findIndex((p) => p.id === editingEntry.value!.id)
@@ -616,8 +684,9 @@ const handlePasswordSubmit = async (data: PasswordFormData): Promise<void> => {
         password: data.password,
         url: data.url,
         description: data.description,
-        is_favorite: data.is_favorite
-      })
+        is_favorite: data.is_favorite,
+        tag_ids: tagIds
+      } as any)
 
       // 添加到本地数组中
       passwords.value.push(newPassword)
