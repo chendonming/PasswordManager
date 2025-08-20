@@ -40,6 +40,93 @@ export class DatabaseService implements DatabaseServiceInterface {
   }
 
   /**
+   * 直接从已派生的 hex 密钥设置加密密钥并尝试解密 .enc
+   * 如果解密失败则抛出错误，切勿在无确认的情况下覆盖 .enc 文件。
+   */
+  async setEncryptionKeyFromHex(hexKey: string): Promise<void> {
+    if (!hexKey || typeof hexKey !== 'string') throw new Error('无效的 hex 密钥')
+    // 转换 hex 到 Buffer 并直接使用
+    const keyBuf = Buffer.from(hexKey, 'hex')
+    this.encryptionKey = keyBuf
+
+    // 如果存在加密文件，尝试解密并在内存中打开
+    if (this.encryptedDbPath && existsSync(this.encryptedDbPath!)) {
+      try {
+        const decryptedBuf = await CryptoService.decryptFileToBuffer(
+          this.encryptedDbPath!,
+          this.encryptionKey!
+        )
+
+        if (this.db) {
+          try {
+            this.db.close()
+          } catch {
+            // ignore
+          }
+          this.db = null
+        }
+
+        this.db = new Database(decryptedBuf, { verbose: console.log })
+        CryptoService.clearBuffer(decryptedBuf)
+        await this.initializeSchema()
+        this.isInitialized = true
+        console.log('已使用 hex 密钥在内存中解密并打开数据库')
+        return
+      } catch (err) {
+        console.error('使用 hex 密钥解密 .enc 失败，拒绝覆盖 .enc:', err)
+        // 不要覆盖 .enc，直接清除内存密钥并抛错
+        this.clearEncryptionKey()
+        throw err
+      }
+    }
+
+    // 如果没有 .enc，但存在明文 DB，则以明文 DB 为基础进行首次加密（通常不会走到这）
+    if (this.plainDbPath && existsSync(this.plainDbPath!)) {
+      const plainBuf = readFileSync(this.plainDbPath!)
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch {
+          // ignore
+        }
+      }
+      this.db = new Database(plainBuf, { verbose: console.log })
+      CryptoService.clearBuffer(plainBuf)
+      const serialized = this.db.serialize()
+      if (this.encryptedDbPath) {
+        await CryptoService.encryptBufferToFile(
+          serialized,
+          this.encryptedDbPath!,
+          this.encryptionKey!
+        )
+      }
+      CryptoService.clearBuffer(serialized)
+      await this.initializeSchema()
+      this.isInitialized = true
+      return
+    }
+
+    // 如果既没有 .enc 也没有明文 DB，则创建新的内存 DB（仅在用户设置主密码的流程中使用）
+    this.db = new Database(':memory:', { verbose: console.log })
+    this.db.exec('PRAGMA foreign_keys = ON')
+    this.db.exec('PRAGMA journal_mode = WAL')
+    this.db.exec('PRAGMA synchronous = FULL')
+    await this.initializeSchema()
+    // 序列化并写回 .enc（若路径可用）
+    const serialized = this.db.serialize()
+    if (this.encryptedDbPath) {
+      await CryptoService.encryptBufferToFile(
+        serialized,
+        this.encryptedDbPath!,
+        this.encryptionKey!
+      )
+    }
+    CryptoService.clearBuffer(serialized)
+    this.isInitialized = true
+    console.log('已创建新的内存 DB 并使用 hex 密钥写回 .enc（如适用）')
+  }
+
+  /**
    * 初始化数据库连接和表结构
    */
   async initialize(): Promise<void> {
@@ -53,7 +140,7 @@ export class DatabaseService implements DatabaseServiceInterface {
       this.encryptedDbPath = encryptedPath
 
       // 如果同时存在明文数据库和加密数据库，优先使用加密文件并删除明文以消除风险
-      if (existsSync(this.plainDbPath) && existsSync(this.encryptedDbPath)) {
+      if (existsSync(this.plainDbPath!) && existsSync(this.encryptedDbPath!)) {
         try {
           unlinkSync(this.plainDbPath)
           console.log('发现 .enc，同时删除磁盘明文 .db 文件以保护数据')
@@ -63,14 +150,14 @@ export class DatabaseService implements DatabaseServiceInterface {
       }
 
       // 如果存在已加密的数据库文件且密钥尚未设置，则不要在磁盘上打开明文数据库
-      if (existsSync(this.encryptedDbPath) && !this.encryptionKey) {
+      if (existsSync(this.encryptedDbPath!) && !this.encryptionKey) {
         console.log('检测到加密数据库，等待用户登录以解密到内存中')
         this.isInitialized = false
         return
       }
 
       // 如果明文数据库存在且没有密钥（未加密场景），打开磁盘文件
-      if (existsSync(this.plainDbPath) && !this.encryptionKey) {
+      if (existsSync(this.plainDbPath!) && !this.encryptionKey) {
         const openPath = dbPath
         this.db = new Database(openPath, {
           verbose: console.log // 开发环境下启用SQL日志
@@ -94,7 +181,7 @@ export class DatabaseService implements DatabaseServiceInterface {
       }
 
       // 如果既没有加密文件也没有明文文件，等待用户设置主密码
-      if (!existsSync(this.encryptedDbPath) && !existsSync(this.plainDbPath)) {
+      if (!existsSync(this.encryptedDbPath!) && !existsSync(this.plainDbPath!)) {
         console.log('未检测到数据库文件，等待用户设置主密码')
         this.isInitialized = false
         return

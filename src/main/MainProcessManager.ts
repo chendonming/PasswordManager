@@ -1,7 +1,7 @@
 import { ipcMain, IpcMainInvokeEvent, app, dialog } from 'electron'
 import { join } from 'path'
 import { unlinkSync } from 'fs'
-import * as crypto from 'crypto'
+// crypto helper was used by previous auto-derive logic; no longer needed
 import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
@@ -66,9 +66,15 @@ export class MainProcessManager {
       const meta = this.dbService.readAuthMetadata()
       if (meta) {
         console.log('检测到元数据文件，尝试自动解锁数据库')
-
-        // 尝试使用元数据信息设置加密密钥
-        const success = await this.autoSetEncryptionKey(meta)
+        // 尝试使用元数据信息设置加密密钥（直接使用已存的 masterPasswordHash）
+        let success = false
+        try {
+          await this.dbService.setEncryptionKeyFromHex(meta.masterPasswordHash)
+          success = true
+        } catch (e) {
+          console.warn('使用 meta.masterPasswordHash 自动解锁失败:', e)
+          success = false
+        }
         if (success) {
           this.isAuthenticated = true
           console.log('已自动认证并解锁数据库')
@@ -82,38 +88,6 @@ export class MainProcessManager {
       console.warn('自动解锁失败:', error)
       // 自动解锁失败不是致命错误，用户仍可以手动认证
     }
-  }
-
-  /**
-   * 使用元数据自动设置加密密钥
-   */
-  private async autoSetEncryptionKey(meta: {
-    masterPasswordHash: string
-    salt: string
-  }): Promise<boolean> {
-    try {
-      // 策略：使用一个基于元数据的派生密码
-      // 这样有元数据文件就能自动解锁，但仍保持一定的安全性
-      const autoPassword = this.generateAutoPassword(meta)
-
-      // 设置加密密钥
-      await this.dbService.setEncryptionKey(autoPassword, meta.salt)
-      console.log('已使用自动派生密码设置加密密钥')
-      return true
-    } catch (error) {
-      console.warn('自动设置加密密钥失败:', error)
-      return false
-    }
-  }
-
-  /**
-   * 基于元数据生成自动密码
-   */
-  private generateAutoPassword(meta: { masterPasswordHash: string; salt: string }): string {
-    // 使用元数据的一部分作为自动密码
-    // 这样确保有相同元数据文件的机器可以解锁，但其他机器不能
-    const combined = meta.masterPasswordHash + meta.salt
-    return crypto.createHash('sha256').update(combined).digest('hex').substring(0, 32)
   }
 
   /**
