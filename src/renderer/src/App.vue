@@ -17,14 +17,6 @@
       <Sidebar
         :active-tab="activeTab"
         :user-info="{ username: '用户', passwordCount: statistics.totalEntries }"
-<<<<<<< HEAD
-        :tags="tagsWithCount"
-        @navigate="handleNavigate"
-        @sync="handleSync"
-        @settings="handleSettings"
-        @filter-by-tag="handleFilterByTag"
-        @add-tag="showTagManager = true"
-=======
         :tags="tags"
         :active-tag-id="activeTagId"
         @navigate="handleNavigate"
@@ -32,7 +24,6 @@
         @settings="handleSettings"
         @add-tag="handleAddTag"
         @filter-by-tag="handleFilterByTag"
->>>>>>> origin/dev
       />
 
       <!-- 主内容区 -->
@@ -191,11 +182,6 @@
       </template>
     </Modal>
 
-<<<<<<< HEAD
-    <!-- 标签管理模态框 -->
-    <Modal :visible="showTagManager" title="标签管理" size="lg" @close="showTagManager = false">
-      <TagManager @tags-updated="refreshTags" />
-=======
     <!-- 标签模态 -->
     <Modal
       :visible="showTagModal"
@@ -227,7 +213,6 @@
           保存
         </button>
       </template>
->>>>>>> origin/dev
     </Modal>
   </div>
 </template>
@@ -649,13 +634,6 @@ const handleSettings = (): void => {
   console.log('打开设置')
 }
 
-<<<<<<< HEAD
-const handleFilterByTag = (tagId: number): void => {
-  const tag = allTags.value.find((t) => t.id === tagId)
-  if (tag) {
-    searchQuery.value = `tag:${tag.name}`
-    handleSearch(searchQuery.value)
-=======
 // 标签相关操作
 const handleAddTag = (): void => {
   editingTag.value = { name: '', color: '#60a5fa' }
@@ -692,7 +670,6 @@ const submitTagForm = async (data: { id?: number; name: string; color: string })
     await loadStatistics()
   } catch (err) {
     console.error('保存标签失败:', err)
->>>>>>> origin/dev
   }
 }
 

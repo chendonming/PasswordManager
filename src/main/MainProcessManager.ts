@@ -6,10 +6,6 @@ import { DatabaseService } from './services/DatabaseService'
 import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
 import { ImportManager } from './services/ImportManager'
-<<<<<<< HEAD
-// ExportManager removed because it's not used in this manager file
-=======
->>>>>>> origin/dev
 import { ChromeCsvImporter } from './services/importers/ChromeCsvImporter'
 
 /**
@@ -20,20 +16,12 @@ export class MainProcessManager {
   private dbService: DatabaseService
   private initializer: DatabaseInitializer
   private importManager: ImportManager
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/dev
   private isAuthenticated = false
 
   constructor() {
     this.dbService = new DatabaseService()
     this.initializer = new DatabaseInitializer(this.dbService)
     this.importManager = new ImportManager()
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/dev
     this.setupIpcHandlers()
     this.initializeImportExportServices()
   }
