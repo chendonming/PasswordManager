@@ -111,7 +111,7 @@
     </div>
 
     <!-- 创建/编辑标签模态框 -->
-    <Modal v-if="showCreateModal || showEditModal" @close="closeModal">
+    <Modal :visible="showCreateModal || showEditModal" @close="closeModal">
       <template #title>
         {{ editingTag ? '编辑标签' : '创建标签' }}
       </template>
@@ -204,7 +204,7 @@
     </Modal>
 
     <!-- 删除确认模态框 -->
-    <Modal v-if="showDeleteModal" @close="showDeleteModal = false">
+    <Modal :visible="showDeleteModal" @close="showDeleteModal = false">
       <template #title>删除标签</template>
       <template #content>
         <p class="text-gray-700 dark:text-gray-300">
