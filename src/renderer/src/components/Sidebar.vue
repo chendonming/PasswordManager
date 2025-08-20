@@ -77,7 +77,16 @@
           <button
             v-for="tag in tags"
             :key="tag.id"
+<<<<<<< HEAD
             class="w-full flex items-center space-x-2 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
+=======
+            :class="[
+              'w-full flex items-center space-x-2 px-3 py-1.5 text-sm rounded-lg transition-colors duration-200',
+              props.activeTagId === tag.id
+                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+            ]"
+>>>>>>> origin/dev
             @click="$emit('filter-by-tag', tag.id)"
           >
             <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
@@ -145,6 +154,7 @@ interface Props {
     username?: string
     passwordCount?: number
   }
+  activeTagId?: number | null
   tags?: Array<{
     id: number
     name: string
@@ -156,7 +166,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   activeTab: 'all',
   userInfo: () => ({ username: '用户', passwordCount: 0 }),
-  tags: () => []
+  tags: () => [],
+  activeTagId: null
 })
 
 // 定义 emits

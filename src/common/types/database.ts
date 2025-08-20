@@ -245,6 +245,7 @@ export interface DatabaseServiceInterface {
 
   // 密码条目管理
   createPasswordEntry(input: CreatePasswordEntryInput): Promise<DecryptedPasswordEntry>
+  createPasswordEntries(input: CreatePasswordEntryInput[]): Promise<DecryptedPasswordEntry[]>
   updatePasswordEntry(id: number, input: UpdatePasswordEntryInput): Promise<DecryptedPasswordEntry>
   deletePasswordEntry(id: number): Promise<void>
   getPasswordEntryById(id: number): Promise<DecryptedPasswordEntry | null>

@@ -17,12 +17,22 @@
       <Sidebar
         :active-tab="activeTab"
         :user-info="{ username: '用户', passwordCount: statistics.totalEntries }"
+<<<<<<< HEAD
         :tags="tagsWithCount"
         @navigate="handleNavigate"
         @sync="handleSync"
         @settings="handleSettings"
         @filter-by-tag="handleFilterByTag"
         @add-tag="showTagManager = true"
+=======
+        :tags="tags"
+        :active-tag-id="activeTagId"
+        @navigate="handleNavigate"
+        @sync="handleSync"
+        @settings="handleSettings"
+        @add-tag="handleAddTag"
+        @filter-by-tag="handleFilterByTag"
+>>>>>>> origin/dev
       />
 
       <!-- 主内容区 -->
@@ -84,7 +94,7 @@
             :entries="displayedPasswords"
             :search-query="searchQuery"
             :selected-entry-id="selectedEntryId"
-            :total-count="isSearchMode ? searchResults.length : statistics.totalEntries"
+            :total-count="displayedTotalCount"
             :has-more="!isSearchMode && hasMore"
             :is-loading="isSearchMode ? isSearching : isLoadingMore"
             :use-server-search="isSearchMode"
@@ -132,6 +142,16 @@
           <!-- 密码生成器视图 -->
           <PasswordGenerator v-else-if="activeTab === 'generator'" />
 
+          <!-- 设置/标签视图 -->
+          <div v-else-if="activeTab === 'settings'" class="p-4">
+            <TagsList
+              :tags="tags"
+              @create="handleAddTag"
+              @edit="handleEditTag"
+              @delete="handleDeleteTag"
+            />
+          </div>
+
           <!-- 默认/欢迎视图 -->
           <WelcomeView v-else @navigate="handleNavigate" />
         </template>
@@ -171,9 +191,43 @@
       </template>
     </Modal>
 
+<<<<<<< HEAD
     <!-- 标签管理模态框 -->
     <Modal :visible="showTagManager" title="标签管理" size="lg" @close="showTagManager = false">
       <TagManager @tags-updated="refreshTags" />
+=======
+    <!-- 标签模态 -->
+    <Modal
+      :visible="showTagModal"
+      :title="editingTag && editingTag.id ? '编辑标签' : '新建标签'"
+      @close="() => (showTagModal = false)"
+    >
+      <TagForm
+        ref="tagFormRef"
+        :initial="editingTag || { name: '', color: '#60a5fa' }"
+        @submit="submitTagForm"
+      />
+      <template #footer>
+        <button
+          type="button"
+          class="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200"
+          @click="() => (showTagModal = false)"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-colors duration-200"
+          @click="
+            () => {
+              tagFormRef?.submit && tagFormRef.submit()
+            }
+          "
+        >
+          保存
+        </button>
+      </template>
+>>>>>>> origin/dev
     </Modal>
   </div>
 </template>
@@ -192,6 +246,8 @@ import Modal from './components/Modal.vue'
 import AuthenticationView from './components/AuthenticationView.vue'
 import PasswordGenerator from './components/PasswordGenerator.vue'
 import WelcomeView from './components/WelcomeView.vue'
+import TagsList from './components/TagsList.vue'
+import TagForm from './components/TagForm.vue'
 
 // Use shared global types declared in `src/preload/index.d.ts` and `src/common/types/database.d.ts`
 
@@ -230,7 +286,15 @@ interface PasswordFormData {
 
 // 响应式数据
 const activeTab = ref('all')
+// 标签数据
+const tags = ref<{ id: number; name: string; color: string; count?: number }[]>([])
+const showTagModal = ref(false)
+const editingTag = ref<{ id?: number; name: string; color: string } | null>(null)
+type TagFormRef = { submit: () => void } | null
+const tagFormRef = ref<TagFormRef>(null)
 const searchQuery = ref('')
+// 当前选中的标签 id（用于过滤）
+const activeTagId = ref<number | null>(null)
 const selectedEntryId = ref<number | undefined>(undefined)
 const showPasswordModal = ref(false)
 const showTagManager = ref(false)
@@ -250,7 +314,21 @@ const isSearching = ref(false)
 
 // 显示的密码数据（根据是否在搜索模式切换）
 const displayedPasswords = computed(() => {
-  return isSearchMode.value ? searchResults.value : passwords.value
+  // 搜索模式优先：如果处于服务器/搜索模式，则返回 searchResults（searchResults 已由 handleSearch 填充）
+  if (isSearchMode.value) return searchResults.value
+
+  // 非搜索模式：如果选中了标签，筛选 passwords
+  if (activeTagId.value != null) {
+    return passwords.value.filter((p) => p.tags?.some((t) => t.id === activeTagId.value))
+  }
+
+  return passwords.value
+})
+
+// 用于显示在 UI 的总数（考虑搜索与标签过滤）
+const displayedTotalCount = computed(() => {
+  if (isSearchMode.value) return searchResults.value.length
+  return activeTagId.value != null ? displayedPasswords.value.length : statistics.value.totalEntries
 })
 
 // 带计数的标签数据
@@ -338,8 +416,20 @@ onMounted(async () => {
   if (isAuthenticated.value) {
     await loadPasswords(true)
     await loadStatistics()
+    await loadTags()
   }
 })
+
+// 加载标签
+const loadTags = async (): Promise<void> => {
+  try {
+    // @ts-expect-error window.api injected by preload
+    const resp = (await window.api.getAllTags()) as { id: number; name: string; color: string }[]
+    tags.value = resp.map((t) => ({ id: t.id, name: t.name, color: t.color }))
+  } catch (err) {
+    console.error('加载标签失败:', err)
+  }
+}
 
 // 密码数据
 const passwords = ref<DecryptedPasswordEntry[]>([])
@@ -542,6 +632,15 @@ const handleNavigate = (tabId: string): void => {
   activeTab.value = tabId
 }
 
+const handleFilterByTag = (tagId: number): void => {
+  // 点击同一个标签则取消过滤
+  if (activeTagId.value === tagId) {
+    activeTagId.value = null
+  } else {
+    activeTagId.value = tagId
+  }
+}
+
 const handleSync = (): void => {
   console.log('同步数据')
 }
@@ -550,11 +649,50 @@ const handleSettings = (): void => {
   console.log('打开设置')
 }
 
+<<<<<<< HEAD
 const handleFilterByTag = (tagId: number): void => {
   const tag = allTags.value.find((t) => t.id === tagId)
   if (tag) {
     searchQuery.value = `tag:${tag.name}`
     handleSearch(searchQuery.value)
+=======
+// 标签相关操作
+const handleAddTag = (): void => {
+  editingTag.value = { name: '', color: '#60a5fa' }
+  showTagModal.value = true
+}
+
+const handleEditTag = (tag: { id: number; name: string; color: string }): void => {
+  editingTag.value = { id: tag.id, name: tag.name, color: tag.color }
+  showTagModal.value = true
+}
+
+const handleDeleteTag = async (id: number): Promise<void> => {
+  try {
+    // @ts-expect-error: preload API typing not declared for deleteTagById
+    await window.api.deleteTagById(id)
+    await loadTags()
+    await loadStatistics()
+  } catch (err) {
+    console.error('删除标签失败:', err)
+  }
+}
+
+const submitTagForm = async (data: { id?: number; name: string; color: string }): Promise<void> => {
+  try {
+    if (data.id) {
+      // @ts-expect-error: preload API typing not declared for updateTag
+      await window.api.updateTag(data.id, { name: data.name, color: data.color })
+    } else {
+      // @ts-expect-error: preload API typing not declared for createTag
+      await window.api.createTag({ name: data.name, color: data.color })
+    }
+    showTagModal.value = false
+    await loadTags()
+    await loadStatistics()
+  } catch (err) {
+    console.error('保存标签失败:', err)
+>>>>>>> origin/dev
   }
 }
 
