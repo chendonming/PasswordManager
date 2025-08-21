@@ -217,8 +217,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import type { ImportConfig } from '../../common/types/import-export'
-import { ImportFormat, ConflictStrategy } from '../../common/types/import-export'
+import type { ImportConfig } from '@common/types/import-export'
+import { ImportFormat, ConflictStrategy } from '@common/types/import-export'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import PasswordList from './components/PasswordList.vue'
