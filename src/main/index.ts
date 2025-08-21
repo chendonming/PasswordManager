@@ -174,6 +174,30 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  // 如果应用是通过自定义协议直接启动（应用未运行时由系统传入的 pm:// URL），
+  // 则 process.argv 中可能包含该 URL。我们需要在渲染器加载完成后将其转发。
+  try {
+    const initialArg = process.argv.find((a) => typeof a === 'string' && a.includes('pm://')) as
+      | string
+      | undefined
+    if (initialArg && mainWindow) {
+      const idx = initialArg.indexOf('pm://')
+      const url = idx >= 0 ? initialArg.slice(idx) : initialArg
+      // 如果页面尚未加载完，等待 did-finish-load 再发送
+      mainWindow.webContents.once('did-finish-load', () => {
+        try {
+          mainWindow?.webContents.send('oauth:callback', url)
+          if (mainWindow?.isMinimized()) mainWindow.restore()
+          mainWindow?.focus()
+        } catch (e) {
+          console.warn('forward initial protocol url failed:', e)
+        }
+      })
+    }
+  } catch (e) {
+    console.warn('initial protocol handling failed:', e)
+  }
+
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
