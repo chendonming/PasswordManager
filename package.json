@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Password Manager",
   "main": "./out/main/index.js",
-  "author": "example.com",
+  "author": "chendm",
   "homepage": "https://github.com/chendonming/PasswordManager",
   "scripts": {
     "format": "prettier --write .",
