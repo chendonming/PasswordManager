@@ -24,9 +24,8 @@ interface TagInput {
   color: string
 }
 
-const { initial } = withDefaults(defineProps<{ initial?: TagInput }>(), {
-  initial: () => ({ name: '', color: '#60a5fa' })
-})
+const props = defineProps<{ initial?: TagInput }>()
+const { initial = { name: '', color: '#60a5fa' } } = props
 
 const emits = defineEmits<{
   submit: [data: TagInput]

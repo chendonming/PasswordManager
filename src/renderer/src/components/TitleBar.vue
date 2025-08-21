@@ -446,20 +446,17 @@ const handleHelp = (action: string): void => {
 // 窗口控制方法
 const minimizeWindow = (): void => {
   console.log('最小化窗口')
-  //@ts-expect-error window.api injected by preload
-  window.api.minimizeWindow()
+  window.api.minimizeWindow && window.api.minimizeWindow()
 }
 
 const maximizeWindow = (): void => {
   console.log('最大化窗口')
-  //@ts-expect-error window.api injected by preload
-  window.api.maximizeWindow()
+  window.api.maximizeWindow && window.api.maximizeWindow()
 }
 
 const closeWindow = (): void => {
   console.log('关闭窗口')
-  //@ts-expect-error window.api injected by preload
-  window.api.closeWindow()
+  window.api.closeWindow && window.api.closeWindow()
 }
 </script>
 

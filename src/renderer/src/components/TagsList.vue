@@ -52,9 +52,8 @@ interface Tag {
   count?: number
 }
 
-const { tags = [] } = withDefaults(defineProps<{ tags?: Tag[] }>(), {
-  tags: () => []
-})
+const props = defineProps<{ tags?: Tag[] }>()
+const { tags = [] } = props
 
 defineEmits<{
   create: []
