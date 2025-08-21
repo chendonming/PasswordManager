@@ -8,6 +8,38 @@ import { MainProcessManager } from './MainProcessManager'
 let mainProcessManager: MainProcessManager | null = null
 let mainWindow: BrowserWindow | null = null
 
+// Single instance lock: ensure second Electron launches exit immediately.
+// Place this early so the second instance won't create its own window.
+const gotTheLockEarly = app.requestSingleInstanceLock()
+if (!gotTheLockEarly) {
+  // If we cannot get the lock, another instance is running -> quit.
+  app.quit()
+  // Also exit the process to be explicit.
+  process.exit(0)
+}
+
+// Register second-instance handler early so the main process can receive
+// protocol URLs forwarded by the OS when another instance is launched.
+app.on('second-instance', (_event, argv: unknown[] /*, workingDirectory */) => {
+  // argv may contain descriptive text plus the pm:// URL. Extract pm://...
+  const raw = argv.find((a) => typeof a === 'string' && a.includes('pm://')) as string | undefined
+  if (!raw) return
+  const idx = raw.indexOf('pm://')
+  const url = idx >= 0 ? raw.slice(idx) : raw
+  if (!url) return
+  // If mainWindow exists, forward; otherwise the handler will be called later
+  // after createWindow and whenReady, so guard accordingly.
+  if (mainWindow) {
+    try {
+      mainWindow.webContents.send('oauth:callback', url)
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    } catch (e) {
+      console.warn('second-instance forwarding failed:', e)
+    }
+  }
+})
+
 // 主题配置
 const THEME_COLORS = {
   light: '#ffffff',
@@ -76,6 +108,23 @@ app.whenReady().then(async () => {
   // 初始化服务
   await initializeServices()
 
+  // 注册自定义协议处理 (pm://)
+  try {
+    // 在开发环境下，需要将 electron 可执行路径和入口脚本作为参数传入
+    // 否则 Windows 可能无法将 pm:// 请求路由到当前运行的 electron 进程
+    if (process.defaultApp) {
+      // 当以 `electron .` 启动时，process.argv[1] 是入口脚本
+      if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient('pm', process.execPath, [process.argv[1]])
+      }
+    } else {
+      // 打包后直接注册即可
+      app.setAsDefaultProtocolClient('pm')
+    }
+  } catch (e) {
+    console.warn('注册自定义协议 pm:// 失败:', e)
+  }
+
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -129,6 +178,16 @@ app.whenReady().then(async () => {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+
+  // macOS: 通过 open-url 事件获取协议回调
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    if (mainWindow) {
+      mainWindow.webContents.send('oauth:callback', url)
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    }
   })
 })
 

@@ -228,7 +228,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+// 引用全局 preload API 类型
+type PreloadApi = Window['api']
+declare const window: Window & { api: PreloadApi }
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { ImportConfig } from '@common/types/import-export'
 import { ImportFormat, ConflictStrategy } from '@common/types/import-export'
 import TitleBar from './components/TitleBar.vue'
@@ -397,6 +400,35 @@ onMounted(async () => {
     console.error('同步初始主题到主进程失败:', error)
   }
 
+  // 注册 OAuth 回调监听：主进程会通过 'oauth:callback' 事件转发回调 URL
+  const oauthCallbackHandler = (payload: unknown): void => {
+    try {
+      const url = typeof payload === 'string' ? payload : JSON.stringify(payload)
+      // 使用应用的 Toast 显示一个轻量弹窗，用户打包后会看到
+      toast.show(`收到 OAuth 回调: ${url}`, 'info')
+    } catch (err) {
+      // 兜底：如果 toast 不可用则使用浏览器 alert
+      console.error('处理 OAuth 回调显示时出错:', err)
+      try {
+        // 尝试使用原生 alert 作为最后手段
+        // @ts-ignore: global alert exists in browser renderer
+        alert('收到 OAuth 回调')
+      } catch (alertErr) {
+        console.error('显示 alert 失败:', alertErr)
+      }
+    }
+  }
+
+  try {
+    if (window.api) {
+      // 监听主进程转发的回调事件（使用 PreloadApi 类型断言）
+      const onFn = (window.api as PreloadApi).on
+      if (typeof onFn === 'function') onFn('oauth:callback', oauthCallbackHandler)
+    }
+  } catch (err) {
+    console.error('注册 oauth 回调监听失败:', err)
+  }
+
   // 检查认证状态（包含首次运行检查）
   await checkAuthStatus()
 
@@ -417,6 +449,18 @@ const loadTags = async (): Promise<void> => {
     console.error('加载标签失败:', err)
   }
 }
+
+// 在组件卸载时移除回调监听
+onUnmounted(() => {
+  try {
+    if (window.api) {
+      const offFn = (window.api as PreloadApi).off
+      if (typeof offFn === 'function') offFn('oauth:callback')
+    }
+  } catch (err) {
+    console.error('移除 oauth 回调监听失败:', err)
+  }
+})
 
 // 密码数据
 const passwords = ref<DecryptedPasswordEntry[]>([])

@@ -23,6 +23,10 @@ interface DecryptedPasswordEntry {
 
 interface PreloadApi {
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+  // Event subscription helpers added by preload
+  on?: (channel: string, listener: (...args: unknown[]) => void) => void
+  once?: (channel: string, listener: (...args: unknown[]) => void) => void
+  off?: (channel: string, listener?: (...args: unknown[]) => void) => void
   // Password related
   searchPasswordEntries: (params: { page?: number; pageSize?: number; query?: string }) => Promise<{
     entries: DecryptedPasswordEntry[]

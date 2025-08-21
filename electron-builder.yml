@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: passwordmanager
+productName: Password Manager
 directories:
   buildResources: build
 files:

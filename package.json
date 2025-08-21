@@ -1,10 +1,10 @@
 {
   "name": "passwordmanager",
   "version": "1.0.0",
-  "description": "An Electron application with Vue and TypeScript",
+  "description": "Password Manager",
   "main": "./out/main/index.js",
   "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "homepage": "https://github.com/chendonming/PasswordManager",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
