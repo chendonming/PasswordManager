@@ -1,4 +1,14 @@
 import { ipcMain, IpcMainInvokeEvent, app, dialog } from 'electron'
+import type { JsonObject } from '../common/types/safe-json'
+import type {
+  CreateTagInput,
+  CreatePasswordEntryInput,
+  UpdatePasswordEntryInput,
+  SearchPasswordsInput,
+  CreateAuditLogInput,
+  UpdateTagInput
+} from '../common/types/database'
+import type { ImportConfig } from '../common/types/import-export'
 import { join } from 'path'
 import { unlinkSync } from 'fs'
 // crypto helper was used by previous auto-derive logic; no longer needed
@@ -7,6 +17,8 @@ import { DatabaseInitializer } from './services/DatabaseInitializer'
 import { CryptoService } from './services/CryptoService'
 import { ImportManager } from './services/ImportManager'
 import { ChromeCsvImporter } from './services/importers/ChromeCsvImporter'
+import SyncManager from './services/sync/SyncManager'
+import GistSyncProvider from './services/sync/providers/GistSyncProvider'
 
 /**
  * 数据库和安全服务的主进程管理器
@@ -16,6 +28,7 @@ export class MainProcessManager {
   private dbService: DatabaseService
   private initializer: DatabaseInitializer
   private importManager: ImportManager
+  private syncManager: SyncManager
 
   private isAuthenticated = false
 
@@ -23,9 +36,13 @@ export class MainProcessManager {
     this.dbService = new DatabaseService()
     this.initializer = new DatabaseInitializer(this.dbService)
     this.importManager = new ImportManager()
+    this.syncManager = new SyncManager()
+
+    // 注册默认的 gist 提供者（可配置 token）
+    const gist = new GistSyncProvider()
+    this.syncManager.registerProvider('gist', gist)
 
     this.setupIpcHandlers()
-    this.initializeImportExportServices()
   }
 
   /**
@@ -37,24 +54,6 @@ export class MainProcessManager {
     this.importManager.registerImporter(chromeCsvImporter)
 
     console.log('导入导出服务初始化完成')
-  }
-
-  /**
-   * 初始化服务
-   */
-  async initialize(): Promise<void> {
-    try {
-      console.log('userData path:', app.getPath('userData'))
-      await this.dbService.initialize()
-
-      // 尝试自动解锁：如果有元数据文件，直接解锁而不需要用户输入密码
-      await this.tryAutoUnlock()
-
-      console.log('主进程服务初始化完成')
-    } catch (error) {
-      console.error('主进程服务初始化失败:', error)
-      throw error
-    }
   }
 
   /**
@@ -72,8 +71,7 @@ export class MainProcessManager {
           await this.dbService.setEncryptionKeyFromHex(meta.masterPasswordHash)
           success = true
         } catch (e) {
-          console.warn('使用 meta.masterPasswordHash 自动解锁失败:', e)
-          success = false
+          console.warn('使用 meta.masterPasswordHash 自動解鎖失敗:', e)
         }
         if (success) {
           this.isAuthenticated = true
@@ -88,6 +86,14 @@ export class MainProcessManager {
       console.warn('自动解锁失败:', error)
       // 自动解锁失败不是致命错误，用户仍可以手动认证
     }
+  }
+
+  // 公共生命周期方法，供 main/index.ts 调用
+  public async initialize(): Promise<void> {
+    this.initializeImportExportServices()
+    await this.dbService.initialize()
+    // 尝试自动解锁在初始化后执行
+    await this.tryAutoUnlock()
   }
 
   /**
@@ -170,24 +176,20 @@ export class MainProcessManager {
    * 设置IPC处理器
    */
   private setupIpcHandlers(): void {
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    const protectedHandler =
-      (fn: (event: IpcMainInvokeEvent, ...args: any[]) => Promise<any>) =>
-      async (event: IpcMainInvokeEvent, ...args: any[]) => {
-        if (!this.isAuthenticated) {
-          return { error: '未认证' }
-        }
-
-        try {
-          // 确保数据库已经解锁（对于加密数据库）
-          await this.ensureDatabaseUnlocked()
-
-          // Forward the original ipc event and args to the wrapped handler
-          return await fn.apply(this, [event, ...args])
-        } catch (e) {
-          return { error: e instanceof Error ? e.message : String(e) }
-        }
+    const ensureAuthAndRun = async <T>(
+      runner: () => Promise<T>
+    ): Promise<T | { error: string }> => {
+      if (!this.isAuthenticated) {
+        return { error: '未认证' }
       }
+
+      try {
+        await this.ensureDatabaseUnlocked()
+        return await runner()
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) }
+      }
+    }
 
     // 认证相关 - 重新设计为自动化认证
     ipcMain.handle('auth:check-status', async () => {
@@ -201,31 +203,21 @@ export class MainProcessManager {
       }
     })
 
-    ipcMain.handle('auth:create-master-password', async (_, masterPassword: string) => {
-      try {
-        await this.initializer.initializeWithMasterPassword(masterPassword)
-        this.isAuthenticated = true
-        return { success: true }
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : '未知错误'
+    ipcMain.handle(
+      'auth:create-master-password',
+      async (_: IpcMainInvokeEvent, masterPassword: string) => {
+        try {
+          await this.initializer.initializeWithMasterPassword(masterPassword)
+          this.isAuthenticated = true
+          return { success: true }
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : '未知错误'
+          }
         }
       }
-    })
-
-    ipcMain.handle('auth:unlock', async (_, masterPassword: string) => {
-      try {
-        const success = await this.initializer.verifyMasterPassword(masterPassword)
-        this.isAuthenticated = success
-        return { success }
-      } catch (error) {
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : '认证失败'
-        }
-      }
-    })
+    )
 
     ipcMain.handle('auth:logout', () => {
       // Clear encryption key / lock application
@@ -258,79 +250,77 @@ export class MainProcessManager {
     // 标签管理
     ipcMain.handle(
       'tags:get-all',
-      protectedHandler(async () => await this.dbService.getAllTags())
+      async () => await ensureAuthAndRun(() => this.dbService.getAllTags())
     )
 
     ipcMain.handle(
       'tags:create',
-      protectedHandler(async (_: any, tagData: any) => await this.dbService.createTag(tagData))
+      async (_: IpcMainInvokeEvent, tagData: CreateTagInput) =>
+        await ensureAuthAndRun(() => this.dbService.createTag(tagData))
     )
 
     ipcMain.handle(
       'tags:update',
-      protectedHandler(
-        async (_: any, id: number, tagData: any) => await this.dbService.updateTag(id, tagData)
-      )
+      async (_: IpcMainInvokeEvent, id: number, tagData: UpdateTagInput) =>
+        await ensureAuthAndRun(() => this.dbService.updateTag(id, tagData))
     )
 
     ipcMain.handle(
       'tags:delete',
-      protectedHandler(async (_: any, id: number) => {
-        await this.dbService.deleteTag(id)
-        return { success: true }
-      })
+      async (_: IpcMainInvokeEvent, id: number) =>
+        await ensureAuthAndRun(async () => {
+          await this.dbService.deleteTag(id)
+          return { success: true }
+        })
     )
 
     // 密码条目管理
     ipcMain.handle(
       'passwords:search',
-      protectedHandler(
-        async (_: any, searchParams: any) =>
-          await this.dbService.searchPasswordEntries(searchParams)
-      )
+      async (_: IpcMainInvokeEvent, searchParams: SearchPasswordsInput) =>
+        await ensureAuthAndRun(() => this.dbService.searchPasswordEntries(searchParams))
     )
 
     ipcMain.handle(
       'passwords:get-by-id',
-      protectedHandler(async (_: any, id: number) => await this.dbService.getPasswordEntryById(id))
+      async (_: IpcMainInvokeEvent, id: number) =>
+        await ensureAuthAndRun(() => this.dbService.getPasswordEntryById(id))
     )
 
     ipcMain.handle(
       'passwords:create',
-      protectedHandler(
-        async (_: any, entryData: any) => await this.dbService.createPasswordEntry(entryData)
-      )
+      async (_: IpcMainInvokeEvent, entryData: CreatePasswordEntryInput) =>
+        await ensureAuthAndRun(() => this.dbService.createPasswordEntry(entryData))
     )
 
     ipcMain.handle(
       'passwords:update',
-      protectedHandler(
-        async (_: any, id: number, entryData: any) =>
-          await this.dbService.updatePasswordEntry(id, entryData)
-      )
+      async (_: IpcMainInvokeEvent, id: number, entryData: UpdatePasswordEntryInput) =>
+        await ensureAuthAndRun(() => this.dbService.updatePasswordEntry(id, entryData))
     )
 
     ipcMain.handle(
       'passwords:delete',
-      protectedHandler(async (_: any, id: number) => {
-        await this.dbService.deletePasswordEntry(id)
-        return { success: true }
-      })
+      async (_: IpcMainInvokeEvent, id: number) =>
+        await ensureAuthAndRun(async () => {
+          await this.dbService.deletePasswordEntry(id)
+          return { success: true }
+        })
     )
 
     ipcMain.handle(
       'passwords:mark-used',
-      protectedHandler(async (_: any, id: number) => {
-        await this.dbService.markAsUsed(id)
-        return { success: true }
-      })
+      async (_: IpcMainInvokeEvent, id: number) =>
+        await ensureAuthAndRun(async () => {
+          await this.dbService.markAsUsed(id)
+          return { success: true }
+        })
     )
 
     ipcMain.handle(
       'passwords:get-history',
-      protectedHandler(
-        async (_: any, entryId: number) => await this.dbService.getPasswordHistory(entryId)
-      )
+      async (_: IpcMainInvokeEvent, entryId: number) =>
+        await ensureAuthAndRun(() => this.dbService.getPasswordHistory(entryId))
     )
 
     // 密码生成器
@@ -343,28 +333,31 @@ export class MainProcessManager {
     })
 
     // 应用设置
+
     ipcMain.handle(
       'settings:get',
-      protectedHandler(async (_: any, key: string) => await this.dbService.getSetting(key))
+      async (_: IpcMainInvokeEvent, key: string) =>
+        await ensureAuthAndRun(() => this.dbService.getSetting(key))
     )
 
     ipcMain.handle(
       'settings:set',
-      protectedHandler(async (_: any, key: string, value: string, description?: string) => {
-        await this.dbService.setSetting(key, value, description)
-        return { success: true }
-      })
+      async (_: IpcMainInvokeEvent, key: string, value: string, description?: string) =>
+        await ensureAuthAndRun(async () => {
+          await this.dbService.setSetting(key, value, description)
+          return { success: true }
+        })
     )
 
     ipcMain.handle(
       'settings:get-all',
-      protectedHandler(async () => await this.dbService.getAllSettings())
+      async () => await ensureAuthAndRun(() => this.dbService.getAllSettings())
     )
 
     // 统计信息
     ipcMain.handle(
       'stats:get',
-      protectedHandler(async () => await this.dbService.getStatistics())
+      async () => await ensureAuthAndRun(() => this.dbService.getStatistics())
     )
 
     // 健康检查和维护
@@ -374,127 +367,143 @@ export class MainProcessManager {
 
     ipcMain.handle(
       'maintenance:repair',
-      protectedHandler(async () => {
-        await this.initializer.repairDatabase()
-        return { success: true }
-      })
+      async () =>
+        await ensureAuthAndRun(async () => {
+          await this.initializer.repairDatabase()
+          return { success: true }
+        })
     )
 
     // 备份
     ipcMain.handle(
       'backup:create',
-      protectedHandler(async (_: any, backupPath: string) => {
-        await this.dbService.backup(backupPath)
-        return { success: true }
-      })
+      async (_: IpcMainInvokeEvent, backupPath: string) =>
+        await ensureAuthAndRun(async () => {
+          await this.dbService.backup(backupPath)
+          return { success: true }
+        })
     )
 
     // 审计日志
     ipcMain.handle(
       'audit:get-logs',
-      protectedHandler(async (_: any, limit?: number) => await this.dbService.getAuditLogs(limit))
+      async (_: IpcMainInvokeEvent, limit?: number) =>
+        await ensureAuthAndRun(() => this.dbService.getAuditLogs(limit))
     )
 
     // 新增：记录审计日志（供 preload 调用）
     ipcMain.handle(
       'audit:log-action',
-      protectedHandler(async (_: any, input: any) => {
-        await this.dbService.logAction(input)
-        return { success: true }
-      })
+      async (_: IpcMainInvokeEvent, input: CreateAuditLogInput) =>
+        await ensureAuthAndRun(async () => {
+          await this.dbService.logAction(input)
+          return { success: true }
+        })
     )
 
     // 导入导出处理器
     ipcMain.handle(
       'import:preview',
-      protectedHandler(async (_: any, config: any) => {
-        try {
-          return await this.importManager.preview(config)
-        } catch (error) {
-          const message = error instanceof Error ? error.message : '导入预览失败'
-          return { success: false, message, error: message }
-        }
-      })
+      async (_: IpcMainInvokeEvent, config: ImportConfig) =>
+        await ensureAuthAndRun(() => this.importManager.preview(config))
     )
 
     ipcMain.handle(
       'import:execute',
-      protectedHandler(async (_: any, config: any) => {
-        try {
-          // 执行导入预览以获取数据
-          const previewResult = await this.importManager.preview(config)
-          if (!previewResult.success || !previewResult.data) {
-            return previewResult
-          }
-
-          // 实际保存密码到数据库（批量处理以减少磁盘写入）
-          const { entries } = previewResult.data
-
-          // 获取已有标签并建立 name->id 映射
-          const existingTags = await this.dbService.getAllTags()
-          const tagNameToId = new Map<string, number>()
-          for (const t of existingTags) tagNameToId.set(t.name, t.id)
-
-          // 用于收集所有需要创建的标签名字
-          const tagsToCreate = new Set<string>()
-
-          // 构建 CreatePasswordEntryInput 数组
-          const passwordInputs: any[] = []
-          for (const entry of entries) {
-            const tagNames: string[] = (entry.tags || []).map((t: any) => t.name).filter(Boolean)
-            for (const name of tagNames) {
-              if (!tagNameToId.has(name)) tagsToCreate.add(name)
+      async (_: IpcMainInvokeEvent, config: ImportConfig) =>
+        await ensureAuthAndRun(async () => {
+          try {
+            // 执行导入预览以获取数据
+            const previewResult = await this.importManager.preview(config)
+            if (!previewResult.success || !previewResult.data) {
+              return previewResult
             }
 
-            passwordInputs.push({
-              title: entry.title || '未命名',
-              username: entry.username || '',
-              password: entry.password || '',
-              url: entry.url || '',
-              description: entry.description || '',
-              tag_ids: [], // later fill with ids
-              is_favorite: entry.is_favorite || false
-            })
-          }
+            // 实际保存密码到数据库（批量处理以减少磁盘写入）
 
-          // 创建缺失的标签并更新映射
-          for (const tagName of tagsToCreate) {
-            try {
-              const createdTag = await this.dbService.createTag({ name: tagName })
-              tagNameToId.set(createdTag.name, createdTag.id)
-            } catch (e) {
-              console.error('创建标签失败:', tagName, e)
+            // 获取已有标签并建立 name->id 映射
+            const existingTags = await this.dbService.getAllTags()
+            const tagNameToId = new Map<string, number>()
+            for (const t of existingTags) tagNameToId.set(t.name, t.id)
+
+            // 用于收集所有需要创建的标签名字
+            const tagsToCreate = new Set<string>()
+
+            // 构建 CreatePasswordEntryInput 数组
+            const passwordInputs: CreatePasswordEntryInput[] = []
+            for (const entryRaw of previewResult.data.entries) {
+              const entry = entryRaw as JsonObject
+              const rawTags = Array.isArray(entry.tags) ? entry.tags : []
+              const tagNames: string[] = rawTags
+                .map((t) =>
+                  typeof t === 'object' && t !== null && 'name' in t
+                    ? String((t as JsonObject).name)
+                    : ''
+                )
+                .filter(Boolean)
+
+              for (const name of tagNames) {
+                if (!tagNameToId.has(name)) tagsToCreate.add(name)
+              }
+
+              const input: CreatePasswordEntryInput = {
+                title: typeof entry.title === 'string' ? entry.title : '未命名',
+                username: typeof entry.username === 'string' ? entry.username : '',
+                password: typeof entry.password === 'string' ? entry.password : '',
+                url: typeof entry.url === 'string' ? entry.url : '',
+                description: typeof entry.description === 'string' ? entry.description : '',
+                tag_ids: [],
+                is_favorite: typeof entry.is_favorite === 'boolean' ? entry.is_favorite : false
+              }
+
+              passwordInputs.push(input)
             }
-          }
 
-          // 填充 tag_ids
-          for (let i = 0; i < entries.length; i++) {
-            const entry = entries[i]
-            const tagNames: string[] = (entry.tags || []).map((t: any) => t.name).filter(Boolean)
-            const ids: number[] = []
-            for (const name of tagNames) {
-              const id = tagNameToId.get(name)
-              if (id) ids.push(id)
+            // 创建缺失的标签并更新映射
+            for (const tagName of tagsToCreate) {
+              try {
+                const createdTag = await this.dbService.createTag({ name: tagName })
+                tagNameToId.set(createdTag.name, createdTag.id)
+              } catch (e) {
+                console.error('创建标签失败:', tagName, e)
+              }
             }
-            passwordInputs[i].tag_ids = ids
-          }
 
-          // 调用批量创建接口
-          const createdEntries = await this.dbService.createPasswordEntries(passwordInputs)
-
-          return {
-            success: true,
-            message: `成功导入${createdEntries.length}条密码记录`,
-            data: {
-              ...previewResult.data,
-              entries: createdEntries
+            // 填充 tag_ids
+            for (let i = 0; i < previewResult.data.entries.length; i++) {
+              const entry = previewResult.data.entries[i] as JsonObject
+              const rawTags = Array.isArray(entry.tags) ? entry.tags : []
+              const tagNames: string[] = rawTags
+                .map((t) =>
+                  typeof t === 'object' && t !== null && 'name' in t
+                    ? String((t as JsonObject).name)
+                    : ''
+                )
+                .filter(Boolean)
+              const ids: number[] = []
+              for (const name of tagNames) {
+                const id = tagNameToId.get(name)
+                if (id) ids.push(id)
+              }
+              passwordInputs[i].tag_ids = ids
             }
+
+            // 调用批量创建接口
+            const createdEntries = await this.dbService.createPasswordEntries(passwordInputs)
+
+            return {
+              success: true,
+              message: `成功导入${createdEntries.length}条密码记录`,
+              data: {
+                ...previewResult.data,
+                entries: createdEntries
+              }
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '导入执行失败'
+            return { success: false, message, error: message }
           }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : '导入执行失败'
-          return { success: false, message, error: message }
-        }
-      })
+        })
     )
 
     ipcMain.handle('import:get-supported-formats', async () => {
@@ -514,7 +523,7 @@ export class MainProcessManager {
     })
 
     // 文件选择对话框
-    ipcMain.handle('dialog:select-import-file', async (_: any, format: string) => {
+    ipcMain.handle('dialog:select-import-file', async (_: IpcMainInvokeEvent, format: string) => {
       try {
         // 根据导入格式设置文件过滤器
         const filters: Array<{ name: string; extensions: string[] }> = []
@@ -575,6 +584,69 @@ export class MainProcessManager {
       } catch (err) {
         console.error('test:crypto failed:', err)
         return { success: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    })
+
+    // 同步相关 IPC（使用 SyncManager 代理）
+    ipcMain.handle('sync:list-providers', async () => {
+      try {
+        return { success: true, data: this.syncManager.listProviders() }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    })
+
+    ipcMain.handle('sync:set-provider', async (_: IpcMainInvokeEvent, key: string) => {
+      try {
+        this.syncManager.setActiveProvider(key)
+        return { success: true }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    })
+
+    ipcMain.handle('sync:configure', async (_: IpcMainInvokeEvent, config: JsonObject) => {
+      try {
+        const res = await this.syncManager.configureActive(config)
+        return res
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    })
+
+    ipcMain.handle('sync:get-status', async () => {
+      try {
+        const status = await this.syncManager.getStatus()
+        return { success: true, data: status }
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    })
+
+    ipcMain.handle('sync:list-remote', async (_: IpcMainInvokeEvent, opts?: JsonObject) => {
+      try {
+        return await this.syncManager.listRemote(opts)
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) }
+      }
+    })
+
+    ipcMain.handle(
+      'sync:push',
+      async (_: IpcMainInvokeEvent, payload: Buffer | string, opts?: JsonObject) => {
+        try {
+          return await this.syncManager.push(payload, opts)
+        } catch (e) {
+          return { success: false, error: e instanceof Error ? e.message : String(e) }
+        }
+      }
+    )
+
+    ipcMain.handle('sync:pull', async (_: IpcMainInvokeEvent, opts?: JsonObject) => {
+      try {
+        return await this.syncManager.pull(opts)
+      } catch (e) {
+        return { success: false, error: e instanceof Error ? e.message : String(e) }
       }
     })
   }

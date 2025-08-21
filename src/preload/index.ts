@@ -1,4 +1,5 @@
 import { contextBridge } from 'electron'
+import type { IpcRendererEvent } from 'electron'
 import type {
   SearchPasswordsResult,
   DecryptedPasswordEntry,
@@ -14,6 +15,7 @@ import type {
   AuditLog
 } from '../common/types/database'
 import type { ImportConfig } from '../common/types/import-export'
+import type { JsonValue } from '../common/types/safe-json'
 import { electronAPI } from '@electron-toolkit/preload'
 
 // Custom APIs for renderer
@@ -64,13 +66,36 @@ const allowedInvokes = new Set([
   'import:execute',
   'import:get-supported-formats',
   // dialog
-  'dialog:select-import-file'
+  'dialog:select-import-file',
+  // sync
+  'sync:list-providers',
+  'sync:set-provider',
+  'sync:configure',
+  'sync:get-status',
+  'sync:list-remote',
+  'sync:push',
+  'sync:pull'
 ])
 
-type Listener = (...args: unknown[]) => void
+type Listener = (...args: JsonValue[]) => void
+
+type InvokeArg =
+  | JsonValue
+  | CreateTagInput
+  | UpdateTagInput
+  | CreatePasswordEntryInput
+  | UpdatePasswordEntryInput
+  | SearchPasswordsInput
+  | CreateAuditLogInput
+  | ImportConfig
+  | Buffer
+  | string
+  | number
+  | boolean
+  | undefined
 
 const api = {
-  invoke: async (channel: string, ...args: unknown[]): Promise<unknown> => {
+  invoke: async <T = JsonValue>(channel: string, ...args: InvokeArg[]): Promise<T> => {
     if (!allowedInvokes.has(channel)) {
       throw new Error(`Invoke channel not allowed: ${channel}`)
     }
@@ -84,13 +109,13 @@ const api = {
     // and should be returned as-is for the renderer to inspect. Here we
     // throw only when an error object is returned without a success field.
     if (res && typeof res === 'object') {
-      const r = res as Record<string, unknown>
+      const r = res as Record<string, JsonValue>
       if ('error' in r && !('success' in r)) {
         const msg = typeof r.error === 'string' ? r.error : String(r.error)
         throw new Error(msg)
       }
     }
-    return res
+    return res as unknown as T
   },
   on: (channel: string, listener: Listener): void => {
     // allow subscribing only to autosave events or other approved events
@@ -98,11 +123,13 @@ const api = {
       console.warn('Adding listener to unapproved channel:', channel)
     }
     // @ts-ignore: ipcRenderer typings are not exported from electronAPI in our build
-    electronAPI.ipcRenderer.on(channel, (_event: unknown, ...args: unknown[]) => listener(...args))
+    electronAPI.ipcRenderer.on(channel, (_event: IpcRendererEvent, ...args: JsonValue[]) =>
+      listener(...args)
+    )
   },
   once: (channel: string, listener: Listener): void => {
     // @ts-ignore: ipcRenderer typings are not exported from electronAPI in our build
-    const onceWrapper = (_event: unknown, ...args: unknown[]): void => listener(...args)
+    const onceWrapper = (_event: IpcRendererEvent, ...args: JsonValue[]): void => listener(...args)
     electronAPI.ipcRenderer.once(channel, onceWrapper)
   },
   off: (channel: string, listener?: Listener): void => {
@@ -150,7 +177,7 @@ const api = {
   deletePassword: async (id: number) => {
     await api.deletePasswordEntry(id)
   },
-  updatePassword: async (id: number, update: Partial<Record<string, unknown>>) =>
+  updatePassword: async (id: number, update: Partial<Record<string, JsonValue>>) =>
     (await api.updatePasswordEntry(
       id,
       update as UpdatePasswordEntryInput
@@ -222,7 +249,19 @@ const api = {
   importPreview: async (config: ImportConfig) => await api.invoke('import:preview', config),
   importExecute: async (config: ImportConfig) => await api.invoke('import:execute', config),
   getSupportedImportFormats: async () => await api.invoke('import:get-supported-formats'),
-  selectImportFile: async (format: string) => await api.invoke('dialog:select-import-file', format)
+  selectImportFile: async (format: string) => await api.invoke('dialog:select-import-file', format),
+
+  // sync high-level helpers
+  listSyncProviders: async () => (await api.invoke('sync:list-providers')) as string[],
+  setSyncProvider: async (key: string) => await api.invoke('sync:set-provider', key),
+  configureSync: async (config: Record<string, JsonValue> | JsonValue) =>
+    await api.invoke('sync:configure', config),
+  getSyncStatus: async () => (await api.invoke('sync:get-status')) as string,
+  listRemoteSync: async (opts?: Record<string, JsonValue>) =>
+    await api.invoke('sync:list-remote', opts),
+  pushSync: async (payload: Buffer | string, opts?: Record<string, JsonValue>) =>
+    await api.invoke('sync:push', payload, opts),
+  pullSync: async (opts?: Record<string, JsonValue>) => await api.invoke('sync:pull', opts)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to
