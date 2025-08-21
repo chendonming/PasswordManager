@@ -217,6 +217,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import type { ImportConfig } from '@common/types/import-export'
+import { ImportFormat, ConflictStrategy } from '@common/types/import-export'
 import TitleBar from './components/TitleBar.vue'
 import Sidebar from './components/Sidebar.vue'
 import PasswordList from './components/PasswordList.vue'
@@ -228,44 +230,7 @@ import WelcomeView from './components/WelcomeView.vue'
 import TagsList from './components/TagsList.vue'
 import TagForm from './components/TagForm.vue'
 
-// API类型声明
-declare global {
-  interface Window {
-    api: {
-      invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
-      searchPasswordEntries: (params: {
-        page?: number
-        pageSize?: number
-        query?: string
-      }) => Promise<{
-        entries: DecryptedPasswordEntry[]
-        total: number
-        page: number
-        pageSize: number
-      }>
-      createPasswordEntry: (data: {
-        title: string
-        username?: string
-        password: string
-        url?: string
-        description?: string
-        is_favorite?: boolean
-      }) => Promise<DecryptedPasswordEntry>
-      updatePasswordEntry: (
-        id: number,
-        data: {
-          title?: string
-          username?: string
-          password?: string
-          url?: string
-          description?: string
-          is_favorite?: boolean
-        }
-      ) => Promise<DecryptedPasswordEntry>
-      deletePasswordEntry: (id: number) => Promise<void>
-    }
-  }
-}
+// Preload API types are declared in src/renderer/src/types/preload.d.ts
 
 // 定义密码条目类型
 interface Tag {
@@ -365,8 +330,7 @@ const toggleTheme = async (): Promise<void> => {
 
   // 通知主进程更新窗口背景色
   try {
-    //@ts-expect-error window.api injected by preload
-    await window.api.setThemeBackground(isDarkMode.value)
+    await window.api.setThemeBackground?.(isDarkMode.value)
     console.log('主题切换到:', isDarkMode.value ? '深色' : '浅色', '，主进程背景已更新')
   } catch (error) {
     console.error('更新主进程背景色失败:', error)
@@ -402,8 +366,7 @@ onMounted(async () => {
 
   // 同步初始主题到主进程
   try {
-    //@ts-expect-error window.api injected by preload
-    await window.api.setThemeBackground(isDarkMode.value)
+    await window.api.setThemeBackground?.(isDarkMode.value)
     console.log('初始主题已同步到主进程:', isDarkMode.value ? '深色' : '浅色')
   } catch (error) {
     console.error('同步初始主题到主进程失败:', error)
@@ -423,7 +386,6 @@ onMounted(async () => {
 // 加载标签
 const loadTags = async (): Promise<void> => {
   try {
-    // @ts-expect-error window.api injected by preload
     const resp = (await window.api.getAllTags()) as { id: number; name: string; color: string }[]
     tags.value = resp.map((t) => ({ id: t.id, name: t.name, color: t.color }))
   } catch (err) {
@@ -587,10 +549,11 @@ const loadMorePasswords = async (): Promise<void> => {
 // 加载统计信息
 const loadStatistics = async (): Promise<void> => {
   try {
-    //@ts-expect-error window.api injected by preload
-    const stats = await window.api.getStatistics()
-    statistics.value = stats
-    console.log('统计信息加载成功:', stats)
+    const stats = await window.api.getStatistics?.()
+    if (stats) {
+      statistics.value = stats
+      console.log('统计信息加载成功:', stats)
+    }
   } catch (err) {
     console.error('加载统计信息失败:', err)
   }
@@ -640,7 +603,6 @@ const handleEditTag = (tag: { id: number; name: string; color: string }): void =
 
 const handleDeleteTag = async (id: number): Promise<void> => {
   try {
-    // @ts-expect-error: preload API typing not declared for deleteTagById
     await window.api.deleteTagById(id)
     await loadTags()
     await loadStatistics()
@@ -652,10 +614,8 @@ const handleDeleteTag = async (id: number): Promise<void> => {
 const submitTagForm = async (data: { id?: number; name: string; color: string }): Promise<void> => {
   try {
     if (data.id) {
-      // @ts-expect-error: preload API typing not declared for updateTag
       await window.api.updateTag(data.id, { name: data.name, color: data.color })
     } else {
-      // @ts-expect-error: preload API typing not declared for createTag
       await window.api.createTag({ name: data.name, color: data.color })
     }
     showTagModal.value = false
@@ -845,11 +805,10 @@ const handleChromeImport = async (): Promise<void> => {
     console.log('开始Chrome CSV导入流程...')
 
     // 使用文件选择对话框让用户选择CSV文件
-    //@ts-expect-error window.api injected by preload
-    const fileResult = await window.api.selectImportFile('chrome')
+    const fileResult = await window.api.selectImportFile?.('chrome')
 
-    if (!fileResult.success || !fileResult.data?.filePath) {
-      console.log('用户取消了文件选择或选择失败:', fileResult.message)
+    if (!fileResult || !fileResult.success || !fileResult.data?.filePath) {
+      console.log('用户取消了文件选择或选择失败:', fileResult?.message)
       return
     }
 
@@ -857,21 +816,20 @@ const handleChromeImport = async (): Promise<void> => {
     console.log('用户选择的文件:', selectedFilePath)
 
     // 构建导入配置
-    const importConfig = {
-      format: 'chrome',
+    const importConfig: ImportConfig = {
+      format: ImportFormat.CHROME,
       filePath: selectedFilePath,
-      conflictStrategy: 'skip',
+      conflictStrategy: ConflictStrategy.SKIP,
       createBackup: true
     }
 
     // 先预览导入数据
     console.log('开始预览导入数据...')
-    //@ts-expect-error window.api injected by preload
-    const previewResult = await window.api.importPreview(importConfig)
+    const previewResult = await window.api.importPreview?.(importConfig)
 
-    if (!previewResult.success) {
-      console.error('预览导入失败:', previewResult.message)
-      alert(`预览失败: ${previewResult.message}`)
+    if (!previewResult || !previewResult.success) {
+      console.error('预览导入失败:', previewResult?.message)
+      alert(`预览失败: ${previewResult?.message}`)
       return
     }
 
@@ -879,8 +837,8 @@ const handleChromeImport = async (): Promise<void> => {
 
     // 显示预览信息让用户确认
     const confirmImport = confirm(
-      `将导入 ${previewResult.data?.statistics.totalEntries} 个密码条目，` +
-        `其中 ${previewResult.data?.statistics.invalidEntries} 个无效条目。是否继续？`
+      `将导入 ${previewResult.data?.statistics?.totalEntries} 个密码条目，` +
+        `其中 ${previewResult.data?.statistics?.invalidEntries} 个无效条目。是否继续？`
     )
 
     if (!confirmImport) {
@@ -890,18 +848,17 @@ const handleChromeImport = async (): Promise<void> => {
 
     // 执行导入
     console.log('开始执行导入...')
-    //@ts-expect-error window.api injected by preload
-    const importResult = await window.api.importExecute(importConfig)
+    const importResult = await window.api.importExecute?.(importConfig)
 
-    if (importResult.success) {
+    if (importResult && importResult.success) {
       console.log('导入成功:', importResult.data)
       // 重新加载密码列表和统计信息
       await loadPasswords(true)
       await loadStatistics()
       alert('导入成功！')
     } else {
-      console.error('导入失败:', importResult.message)
-      alert(`导入失败: ${importResult.message}`)
+      console.error('导入失败:', importResult?.message)
+      alert(`导入失败: ${importResult?.message}`)
     }
   } catch (error) {
     console.error('Chrome导入过程中发生错误:', error)

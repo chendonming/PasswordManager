@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
 
-// @ts-expect-error: preload may inject getAppVersions into window.api
 const versions = reactive({ ...(window.api.getAppVersions ? window.api.getAppVersions() : {}) })
 </script>
 
