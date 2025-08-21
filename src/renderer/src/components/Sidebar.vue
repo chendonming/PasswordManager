@@ -74,7 +74,7 @@
           </button>
         </div>
         <div class="space-y-1">
-          <button
+          <div
             v-for="tag in tags"
             :key="tag.id"
             :class="[
@@ -83,12 +83,78 @@
                 ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300'
                 : 'hover:bg-gray-100 dark:hover:bg-gray-700'
             ]"
-            @click="$emit('filter-by-tag', tag.id)"
           >
-            <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
-            <span class="flex-1 text-left text-gray-700 dark:text-gray-200">{{ tag.name }}</span>
-            <span class="text-xs text-gray-500 dark:text-gray-400">{{ tag.count || 0 }}</span>
-          </button>
+            <button
+              class="flex-1 text-left flex items-center space-x-2"
+              @click="$emit('filter-by-tag', tag.id)"
+            >
+              <div class="w-3 h-3 rounded-full" :style="{ backgroundColor: tag.color }"></div>
+              <span class="flex-1 text-left text-gray-700 dark:text-gray-200">{{ tag.name }}</span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">{{ tag.count || 0 }}</span>
+            </button>
+
+            <!-- 编辑/删除按钮：大屏显示，窄屏隐藏 -->
+            <div class="flex items-center space-x-1 ml-2">
+              <button
+                class="hidden sm:flex w-6 h-6 items-center justify-center text-gray-500 hover:text-blue-600 dark:hover:text-blue-400"
+                title="编辑标签"
+                @click="$emit('edit-tag', tag)"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    d="M17.414 2.586a2 2 0 010 2.828l-9.192 9.192a1 1 0 01-.464.263l-4 1a1 1 0 01-1.212-1.212l1-4a1 1 0 01.263-.464l9.192-9.192a2 2 0 012.828 0z"
+                  />
+                </svg>
+              </button>
+              <button
+                class="hidden sm:flex w-6 h-6 items-center justify-center text-gray-500 hover:text-red-600 dark:hover:text-red-400"
+                title="删除标签"
+                @click="$emit('delete-tag', tag.id)"
+              >
+                <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path
+                    fill-rule="evenodd"
+                    d="M6 2a1 1 0 00-1 1v1H3a1 1 0 100 2h14a1 1 0 100-2h-2V3a1 1 0 00-1-1H6zm2 7a1 1 0 10-2 0v6a1 1 0 102 0V9zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V9z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </button>
+
+              <!-- 小屏菜单按钮 -->
+              <div class="relative sm:hidden">
+                <button
+                  class="w-6 h-6 flex items-center justify-center text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  aria-label="更多"
+                  @click="openMenuId = openMenuId === tag.id ? null : tag.id"
+                >
+                  <svg class="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path
+                      d="M6 10a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0zm6 0a2 2 0 11-4 0 2 2 0 014 0z"
+                    />
+                  </svg>
+                </button>
+
+                <!-- 菜单弹出 -->
+                <div
+                  v-if="openMenuId === tag.id"
+                  class="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg z-20"
+                >
+                  <button
+                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                    @click="$emit('edit-tag', tag)"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900"
+                    @click="$emit('delete-tag', tag.id)"
+                  >
+                    删除
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </nav>
@@ -141,7 +207,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 // 定义 props
 interface Props {
@@ -166,11 +232,16 @@ const props = withDefaults(defineProps<Props>(), {
   activeTagId: null
 })
 
+// 用于小屏幕的标签操作菜单
+const openMenuId = ref<number | null>(null)
+
 // 定义 emits
 defineEmits<{
   navigate: [tabId: string]
   'filter-by-tag': [tagId: number]
   'add-tag': []
+  'edit-tag': [tag: { id: number; name: string; color: string; count?: number }]
+  'delete-tag': [id: number]
   sync: []
   settings: []
 }>()

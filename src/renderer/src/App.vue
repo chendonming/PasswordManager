@@ -24,6 +24,8 @@
         @settings="handleSettings"
         @add-tag="handleAddTag"
         @filter-by-tag="handleFilterByTag"
+        @edit-tag="handleEditTag"
+        @delete-tag="handleDeleteTag"
       />
 
       <!-- 主内容区 -->
@@ -212,6 +214,16 @@
         </button>
       </template>
     </Modal>
+    <!-- 应用级确认模态和通知（放在根节点内部） -->
+    <ConfirmModal
+      :visible="confirmVisible"
+      :title="confirmOptions?.title"
+      :message="confirmOptions?.message || ''"
+      @confirm="handleConfirm"
+      @cancel="handleCancel"
+    />
+
+    <Toast />
   </div>
 </template>
 
@@ -229,6 +241,10 @@ import PasswordGenerator from './components/PasswordGenerator.vue'
 import WelcomeView from './components/WelcomeView.vue'
 import TagsList from './components/TagsList.vue'
 import TagForm from './components/TagForm.vue'
+import ConfirmModal from './components/ConfirmModal.vue'
+import Toast from './components/Toast.vue'
+import { useToastStore } from './composables/useToast'
+import { useConfirm } from './composables/useConfirm'
 
 // Preload API types are declared in src/renderer/src/types/preload.d.ts
 
@@ -279,6 +295,15 @@ const selectedEntryId = ref<number | undefined>(undefined)
 const showPasswordModal = ref(false)
 const passwordFormRef = ref<InstanceType<typeof PasswordForm> | null>(null)
 const authViewRef = ref<InstanceType<typeof AuthenticationView> | null>(null)
+
+// useConfirm/composable and toast store
+const _confirm = useConfirm()
+const confirmVisible = _confirm.visible
+const confirmOptions = _confirm.options
+const confirm = _confirm.confirm
+const handleConfirm = _confirm.handleConfirm
+const handleCancel = _confirm.handleCancel
+const toast = useToastStore()
 
 // 分页状态
 const currentPage = ref(1)
@@ -602,12 +627,17 @@ const handleEditTag = (tag: { id: number; name: string; color: string }): void =
 }
 
 const handleDeleteTag = async (id: number): Promise<void> => {
+  const ok = await confirm('确定要删除此标签吗？该操作不可撤销。', '删除标签')
+  if (!ok) return
+
   try {
     await window.api.deleteTagById(id)
     await loadTags()
     await loadStatistics()
   } catch (err) {
     console.error('删除标签失败:', err)
+    const message = err instanceof Error ? err.message : String(err)
+    toast.show('删除标签失败：' + message, 'error')
   }
 }
 
@@ -829,19 +859,20 @@ const handleChromeImport = async (): Promise<void> => {
 
     if (!previewResult || !previewResult.success) {
       console.error('预览导入失败:', previewResult?.message)
-      alert(`预览失败: ${previewResult?.message}`)
+      toast.show(`预览失败: ${previewResult?.message}`, 'error')
       return
     }
 
     console.log('预览结果:', previewResult.data)
 
     // 显示预览信息让用户确认
-    const confirmImport = confirm(
+    const ok = await confirm(
       `将导入 ${previewResult.data?.statistics?.totalEntries} 个密码条目，` +
-        `其中 ${previewResult.data?.statistics?.invalidEntries} 个无效条目。是否继续？`
+        `其中 ${previewResult.data?.statistics?.invalidEntries} 个无效条目。是否继续？`,
+      '确认导入'
     )
 
-    if (!confirmImport) {
+    if (!ok) {
       console.log('用户取消了导入')
       return
     }
@@ -855,14 +886,14 @@ const handleChromeImport = async (): Promise<void> => {
       // 重新加载密码列表和统计信息
       await loadPasswords(true)
       await loadStatistics()
-      alert('导入成功！')
+      toast.show('导入成功！', 'success')
     } else {
       console.error('导入失败:', importResult?.message)
-      alert(`导入失败: ${importResult?.message}`)
+      toast.show(`导入失败: ${importResult?.message}`, 'error')
     }
   } catch (error) {
     console.error('Chrome导入过程中发生错误:', error)
-    alert('导入过程中发生错误，请查看控制台了解详情')
+    toast.show('导入过程中发生错误，请查看控制台了解详情', 'error')
   }
 }
 
