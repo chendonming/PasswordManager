@@ -41,7 +41,13 @@ export class MainProcessManager {
     // 注册默认的 gist 提供者（可配置 token）
     const gist = new GistSyncProvider()
     this.syncManager.registerProvider('gist', gist)
-
+    // 设置默认激活提供者，避免出现 "no active provider"
+    try {
+      this.syncManager.setActiveProvider('gist')
+    } catch (e) {
+      console.warn('设置默认 sync provider 失败:', e)
+    }
+    
     this.setupIpcHandlers()
   }
 
@@ -641,10 +647,45 @@ export class MainProcessManager {
         }
       }
     )
-
+    
+    // 推送当前正在使用的加密数据库文件（无需渲染进程选择文件）
+    ipcMain.handle(
+      'sync:push-current',
+      async (_: IpcMainInvokeEvent, opts?: JsonObject) => {
+        try {
+          const buf = await this.dbService.readEncryptedDatabaseBuffer()
+          if (!buf) {
+            return { success: false, message: 'encrypted file not found', data: null }
+          }
+          return await this.syncManager.push(buf, opts)
+        } catch (e) {
+          return { success: false, error: e instanceof Error ? e.message : String(e) }
+        }
+      }
+    )
+    
     ipcMain.handle('sync:pull', async (_: IpcMainInvokeEvent, opts?: JsonObject) => {
       try {
-        return await this.syncManager.pull(opts)
+        const res = await this.syncManager.pull(opts)
+        if (!res || !res.success) {
+          return res
+        }
+        const pulled = res.data
+        // 如果 pull 返回 Buffer（我们的 Gist provider 返回解码后的 Buffer），则把它交给 DatabaseService 处理导入
+        if (Buffer.isBuffer(pulled)) {
+          try {
+            const importRes = await this.dbService.importEncryptedDatabaseBuffer(pulled as Buffer)
+            return {
+              success: importRes.success,
+              message: importRes.message || res.message,
+              data: { decrypted: importRes.decrypted === true }
+            }
+          } catch (err) {
+            return { success: false, error: err instanceof Error ? err.message : String(err) }
+          }
+        }
+        // 非 Buffer 数据（例如旧格式文本或 null），直接返回原始结果
+        return res
       } catch (e) {
         return { success: false, error: e instanceof Error ? e.message : String(e) }
       }

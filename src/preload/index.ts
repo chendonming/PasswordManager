@@ -74,6 +74,7 @@ const allowedInvokes = new Set([
   'sync:get-status',
   'sync:list-remote',
   'sync:push',
+  'sync:push-current',
   'sync:pull'
 ])
 
@@ -261,9 +262,24 @@ const api = {
     await api.invoke('sync:list-remote', opts),
   pushSync: async (payload: Buffer | string, opts?: Record<string, JsonValue>) =>
     await api.invoke('sync:push', payload, opts),
-  pullSync: async (opts?: Record<string, JsonValue>) => await api.invoke('sync:pull', opts)
-}
+  pullSync: async (opts?: Record<string, JsonValue>) => await api.invoke('sync:pull', opts),
 
+  // Group sync helpers under a single namespace for renderer convenience
+  sync: {
+    listProviders: async () => (await api.invoke('sync:list-providers')) as string[],
+    setProvider: async (key: string) => await api.invoke('sync:set-provider', key),
+    configure: async (config: Record<string, JsonValue> | JsonValue) =>
+      await api.invoke('sync:configure', config),
+    getStatus: async () => (await api.invoke('sync:get-status')) as string,
+    listRemote: async (opts?: Record<string, JsonValue>) =>
+      await api.invoke('sync:list-remote', opts),
+    push: async (payload: Buffer | string, opts?: Record<string, JsonValue>) =>
+      await api.invoke('sync:push', payload, opts),
+    pushCurrent: async (opts?: Record<string, JsonValue>) =>
+      await api.invoke('sync:push-current', opts),
+    pull: async (opts?: Record<string, JsonValue>) => await api.invoke('sync:pull', opts)
+  }
+}
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.

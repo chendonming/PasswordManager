@@ -101,7 +101,8 @@ export class GistSyncProvider implements ISyncProvider {
     }
   }
 
-  // 从 gist 拉取内容（支持传入 gistId 或使用 latest）
+  // 从 gist 拉取内容（支持传入 gistId）
+  // 存储约定：我们将整个加密数据库文件以 base64 字符串存入 gist 文件内容中。
   async pull(opts?: SyncProviderConfig): Promise<SyncResult<Buffer | string | null>> {
     try {
       if (!this.token) return { success: false, message: 'no token provided', data: null }
@@ -115,6 +116,24 @@ export class GistSyncProvider implements ISyncProvider {
       if (keys.length === 0) return { success: true, data: null }
       const first = files[keys[0]] as JsonObject
       const content = ((first && (first.content as string)) || '') as string
+
+      // 尝试检测并解码 base64（允许内容包含换行）
+      const normalized = content.replace(/\s+/g, '')
+      const isBase64 =
+        normalized.length > 0 &&
+        normalized.length % 4 === 0 &&
+        /^[A-Za-z0-9+/=]+$/.test(normalized)
+
+      if (isBase64) {
+        try {
+          const decoded = Buffer.from(normalized, 'base64')
+          return { success: true, data: decoded }
+        } catch {
+          // fallthrough to return utf8 buffer
+        }
+      }
+
+      // 回退：按 utf8 文本返回（兼容旧格式）
       return { success: true, data: Buffer.from(content, 'utf8') }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -129,7 +148,17 @@ export class GistSyncProvider implements ISyncProvider {
       const gistId = opts && typeof opts['gistId'] === 'string' ? (opts['gistId'] as string) : null
       const filename =
         (opts && typeof opts['filename'] === 'string' && opts['filename']) || 'passwords.dat'
-      const content = Buffer.isBuffer(localPayload) ? localPayload.toString('utf8') : localPayload
+      // If caller provided a Buffer (encrypted .enc), store it as base64 so it survives
+      // transport as gist text and can be decoded back to a Buffer on pull.
+      let content: string
+      if (Buffer.isBuffer(localPayload)) {
+        content = localPayload.toString('base64')
+      } else if (typeof localPayload === 'string') {
+        content = localPayload
+      } else {
+        // fallback: coerce to empty string to avoid sending non-string body
+        content = ''
+      }
 
       if (gistId) {
         // update

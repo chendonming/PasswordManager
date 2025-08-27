@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { readFileSync, existsSync, unlinkSync, writeFileSync } from 'fs'
+import { readFileSync, existsSync, unlinkSync, writeFileSync, renameSync } from 'fs'
 import { join } from 'path'
 import { app, BrowserWindow } from 'electron'
 import { CryptoService } from './CryptoService'
@@ -124,6 +124,121 @@ export class DatabaseService implements DatabaseServiceInterface {
     CryptoService.clearBuffer(serialized)
     this.isInitialized = true
     console.log('已创建新的内存 DB 并使用 hex 密钥写回 .enc（如适用）')
+  }
+  /**
+   * 从外部来源导入加密数据库 Buffer（例如从 Gist 拉取的 base64 解码结果）
+   * - 在写入前对现有加密文件做备份（.enc.bak）
+   * - 写入后如果应用当前已解锁（this.encryptionKey 存在），会尝试解密并在内存中替换数据库
+   * - 在任何失败情况下尝试回滚到备份
+   */
+  async importEncryptedDatabaseBuffer(
+    buf: Buffer
+  ): Promise<{ success: boolean; message?: string; decrypted?: boolean }> {
+    if (!this.encryptedDbPath) return { success: false, message: 'encryptedDbPath not set', decrypted: false }
+    const target = this.encryptedDbPath
+    const bak = `${target}.bak`
+    try {
+      // 备份原文件（如果存在）
+      if (existsSync(target)) {
+        try {
+          renameSync(target, bak)
+        } catch (e) {
+          console.warn('备份原始 encrypted 文件失败:', e)
+          // 继续尝试写入新文件
+        }
+      }
+
+      // 写入临时文件然后原子替换，减少半写风险
+      const tmp = `${target}.tmp.${Date.now()}`
+      writeFileSync(tmp, buf, { mode: 0o600 })
+      try {
+        renameSync(tmp, target)
+      } catch (e) {
+        // 如果重命名失败，清理临时文件并抛错
+        try {
+          unlinkSync(tmp)
+        } catch {
+          /* ignore */
+        }
+        throw e
+      }
+
+      // 如果当前有可用的解密密钥，尝试在内存中解密并替换 DB
+      if (this.encryptionKey) {
+        try {
+          const decryptedBuf = await CryptoService.decryptFileToBuffer(target, this.encryptionKey!)
+          // 关闭并替换内存 DB
+          if (this.db) {
+            try {
+              this.db.close()
+            } catch {
+              // ignore
+            }
+            this.db = null
+          }
+          this.db = new Database(decryptedBuf, { verbose: console.log })
+          CryptoService.clearBuffer(decryptedBuf)
+          await this.initializeSchema()
+          this.isInitialized = true
+
+          // 导入成功后删除备份（非必须）
+          try {
+            if (existsSync(bak)) unlinkSync(bak)
+          } catch {
+            /* ignore */
+          }
+
+          return { success: true, message: 'imported and decrypted', decrypted: true }
+        } catch (err) {
+          // 解密失败：尝试回滚备份
+          try {
+            if (existsSync(bak)) {
+              // 覆盖当前出错的文件
+              try {
+                renameSync(bak, target)
+              } catch {
+                /* ignore */
+              }
+            }
+          } catch {
+            /* ignore */
+          }
+          const msg = err instanceof Error ? err.message : String(err)
+          return { success: false, message: `imported but decrypt failed: ${msg}`, decrypted: false }
+        }
+      }
+
+      // 没有密钥：只写入磁盘，等待用户下次解锁生效
+      return { success: true, message: 'imported to disk; will take effect after unlock', decrypted: false }
+    } catch (err) {
+      // 写入过程中出现错误，尝试回滚备份
+      try {
+        if (existsSync(bak)) {
+          renameSync(bak, target)
+        }
+      } catch {
+        /* ignore */
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      return { success: false, message: msg, decrypted: false }
+    }
+  }
+
+  /**
+   * 读取当前加密数据库文件为 Buffer（不会尝试解密）
+   * 返回 Buffer 或 null（文件不存在或读取失败）
+   */
+  async readEncryptedDatabaseBuffer(): Promise<Buffer | null> {
+    if (!this.encryptedDbPath) return null
+    if (!existsSync(this.encryptedDbPath)) return null
+    try {
+      const raw = readFileSync(this.encryptedDbPath)
+      // 返回一个新的 Buffer 副本以防止外部修改内部引用
+      return Buffer.from(raw)
+    } catch (e) {
+      console.warn('readEncryptedDatabaseBuffer 读取失败:', e)
+      return null
+    }
   }
 
   /**

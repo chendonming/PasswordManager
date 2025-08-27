@@ -144,6 +144,9 @@
               @delete="handleDeleteTag"
             />
           </div>
+          <div v-else-if="activeTab === 'sync'" class="p-4">
+            <SyncView />
+          </div>
 
           <!-- 默认/欢迎视图 -->
           <WelcomeView v-else @navigate="handleNavigate" />
@@ -246,6 +249,7 @@ import TagsList from './components/TagsList.vue'
 import TagForm from './components/TagForm.vue'
 import ConfirmModal from './components/ConfirmModal.vue'
 import Toast from './components/Toast.vue'
+import SyncView from './components/SyncView.vue'
 import { useToastStore } from './composables/useToast'
 import { useConfirm } from './composables/useConfirm'
 
